@@ -155,6 +155,28 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
     });
     fc.on("mouse:up", () => clearGuides());
 
+    // Mouse wheel zoom (Cmd/Ctrl + wheel) - Canva-style
+    fc.on("mouse:wheel", (opt) => {
+      const e = opt.e as WheelEvent;
+      if (!e.ctrlKey && !e.metaKey) return; // Only zoom with modifier
+      e.preventDefault();
+      e.stopPropagation();
+      const dim = DIMENSIONS[size];
+      let newZoom = fc.getZoom() * (1 - e.deltaY * 0.005);
+      newZoom = Math.max(0.05, Math.min(newZoom, 5));
+      fc.setZoom(newZoom);
+      fc.setDimensions(
+        { width: dim.px.w * newZoom, height: dim.px.h * newZoom },
+        { cssOnly: true },
+      );
+      if (guidesRef.current) {
+        guidesRef.current.width = dim.px.w * newZoom;
+        guidesRef.current.height = dim.px.h * newZoom;
+      }
+      setZoomState(newZoom);
+      onZoomChange?.(newZoom);
+    });
+
     // History
     const pushHistory = () => {
       if (historyRef.current.suppress) return;
@@ -216,24 +238,32 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  const applyZoom = (newZoom: number) => {
+    const fc = fcRef.current;
+    if (!fc) return;
+    const dim = DIMENSIONS[size];
+    fc.setZoom(newZoom);
+    const cssW = dim.px.w * newZoom;
+    const cssH = dim.px.h * newZoom;
+    fc.setDimensions({ width: cssW, height: cssH }, { cssOnly: true });
+    if (guidesRef.current) {
+      guidesRef.current.width = cssW;
+      guidesRef.current.height = cssH;
+    }
+    setZoomState(newZoom);
+    onZoomChange?.(newZoom);
+  };
+
   const fitToViewImpl = (fc: FabricCanvas | null, container: HTMLDivElement | null) => {
     if (!fc || !container) return;
     const rect = container.getBoundingClientRect();
+    const dim = DIMENSIONS[size];
     const z = computeFitZoom(
-      { w: fc.getWidth(), h: fc.getHeight() },
+      { w: dim.px.w, h: dim.px.h },
       { w: rect.width, h: rect.height },
       60,
     );
-    fc.setZoom(z);
-    const newW = fc.getWidth() * z;
-    const newH = fc.getHeight() * z;
-    fc.setDimensions({ width: newW, height: newH }, { cssOnly: true });
-    if (guidesRef.current) {
-      guidesRef.current.width = newW;
-      guidesRef.current.height = newH;
-    }
-    setZoomState(z);
-    onZoomChange?.(z);
+    applyZoom(z);
   };
 
   // --- Snap guides ---
@@ -839,33 +869,17 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
       fc.moveObjectTo(obj, toIndex);
       fc.requestRenderAll();
     },
-    setZoom: (z) => {
-      const fc = fcRef.current;
-      if (!fc) return;
-      fc.setZoom(z);
-      setZoomState(z);
-      onZoomChange?.(z);
-    },
+    setZoom: (z) => applyZoom(Math.max(0.05, Math.min(z, 5))),
     fitToView: () => fitToViewImpl(fcRef.current, containerRef.current),
     zoomIn: () => {
       const fc = fcRef.current;
       if (!fc) return;
-      const next = Math.min(fc.getZoom() * 1.25, 4);
-      fc.setZoom(next);
-      fc.setDimensions({
-        width: fc.getWidth() / fc.getZoom() * next,
-        height: fc.getHeight() / fc.getZoom() * next,
-      }, { cssOnly: true });
-      setZoomState(next);
-      onZoomChange?.(next);
+      applyZoom(Math.min(fc.getZoom() * 1.2, 5));
     },
     zoomOut: () => {
       const fc = fcRef.current;
       if (!fc) return;
-      const next = Math.max(fc.getZoom() * 0.8, 0.05);
-      fc.setZoom(next);
-      setZoomState(next);
-      onZoomChange?.(next);
+      applyZoom(Math.max(fc.getZoom() * 0.83, 0.05));
     },
     resize: (newSize) => {
       const fc = fcRef.current;
@@ -1011,15 +1025,16 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
   return (
     <div
       ref={containerRef}
-      className="relative grid h-full w-full place-items-center overflow-auto bg-cream p-8 [background-image:radial-gradient(circle,rgba(10,10,6,0.06)_1px,transparent_1px)] [background-size:24px_24px]"
+      className="relative h-full w-full overflow-auto bg-cream [background-image:radial-gradient(circle,rgba(10,10,6,0.06)_1px,transparent_1px)] [background-size:24px_24px]"
     >
-      <div className="relative shadow-[0_30px_60px_-20px_rgba(10,10,6,0.3)]">
-        <canvas ref={elRef} />
-        {/* Snap guides overlay */}
-        <canvas
-          ref={guidesRef}
-          className="pointer-events-none absolute inset-0"
-        />
+      <div className="grid min-h-full min-w-full place-items-center p-8 md:p-12">
+        <div className="relative shadow-[0_30px_60px_-20px_rgba(10,10,6,0.3)]">
+          <canvas ref={elRef} />
+          {/* Snap guides overlay */}
+          <canvas
+            ref={guidesRef}
+            className="pointer-events-none absolute inset-0"
+          />
         {/* Bleed line (3mm outside trim — outer red dashed) */}
         {showBleed && (
           <div
@@ -1048,6 +1063,7 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
             title="Safe area · keep important content inside"
           />
         )}
+        </div>
       </div>
     </div>
   );
@@ -1075,6 +1091,8 @@ function templateObjectToFabric(obj: TemplateObject): FabricObject | null {
       fill: obj.fill,
       rx: obj.rx ?? 0, ry: obj.ry ?? 0,
       angle: obj.angle ?? 0,
+      stroke: (obj as any).stroke,
+      strokeWidth: (obj as any).strokeWidth,
     });
   }
   if (obj.type === "circle") {
@@ -1090,13 +1108,15 @@ function templateObjectToFabric(obj: TemplateObject): FabricObject | null {
       fontFamily: obj.fontFamily,
       fontSize: obj.fontSize,
       fontWeight: obj.fontWeight ?? "normal",
+      fontStyle: obj.fontStyle ?? "normal",
       fill: obj.fill,
       textAlign: obj.textAlign ?? "left",
       lineHeight: obj.lineHeight ?? 1.16,
       charSpacing: obj.charSpacing ?? 0,
       angle: obj.angle ?? 0,
-      width: 1500,
+      width: 2200,
       editable: true,
+      splitByGrapheme: false,
     });
   }
   return null;

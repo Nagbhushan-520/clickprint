@@ -306,11 +306,18 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false, temp
           onImageUpload={(f) => canvasRef.current?.addImage(f)}
         />
 
+        {/* Mobile backdrop when panel is open */}
         {panel && (
-          <aside className="absolute inset-y-0 left-16 z-30 w-72 shrink-0 border-r border-ink-900/8 bg-paper md:relative md:left-0 md:flex md:flex-col">
+          <div
+            className="fixed inset-0 z-20 bg-ink-900/30 backdrop-blur-sm md:hidden"
+            onClick={() => setPanel(null)}
+          />
+        )}
+        {panel && (
+          <aside className="fixed left-16 top-14 bottom-20 z-30 flex w-60 flex-col border-r border-ink-900/8 bg-paper shadow-2xl md:static md:left-auto md:top-auto md:bottom-auto md:shadow-none md:w-64">
             <button
               onClick={() => setPanel(null)}
-              className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full border border-ink-900/10 bg-paper md:hidden"
+              className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full border border-ink-900/10 bg-paper md:hidden z-10"
               aria-label="Close panel"
             >
               <span className="text-xs text-ink-700">✕</span>

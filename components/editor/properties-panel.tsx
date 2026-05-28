@@ -35,13 +35,7 @@ export function PropertiesPanel({
   onSetPosition?: (props: { left?: number; top?: number; width?: number; height?: number; angle?: number }) => void;
 }) {
   if (!selected) {
-    return (
-      <aside className="hidden w-64 shrink-0 border-l border-ink-900/8 bg-paper p-4 lg:block">
-        <div className="rounded-2xl border border-dashed border-ink-900/10 bg-cream p-6 text-center text-xs text-ink-500">
-          Select an object on the canvas to edit its properties.
-        </div>
-      </aside>
-    );
+    return null; // Hide entirely when nothing selected — frees up canvas space
   }
 
   const type = (selected as any).type;
@@ -50,7 +44,7 @@ export function PropertiesPanel({
   const isShape = type === "rect" || type === "circle" || type === "line" || type === "triangle" || type === "polygon" || type === "path";
 
   return (
-    <aside className="hidden w-64 shrink-0 overflow-y-auto border-l border-ink-900/8 bg-paper lg:block">
+    <aside className="hidden w-56 shrink-0 overflow-y-auto border-l border-ink-900/8 bg-paper lg:block">
       <div className="border-b border-ink-900/8 px-4 py-4">
         <h3 className="font-display text-sm font-semibold text-ink-900">
           {isText ? "Text properties" : isImage ? "Image properties" : "Shape properties"}
