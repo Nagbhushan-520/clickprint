@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 48 33% 96%;
+    --foreground: 30 7% 4%;
+    --muted: 48 16% 88%;
+    --muted-foreground: 30 5% 35%;
+    --border: 30 8% 84%;
+    --input: 30 8% 88%;
+    --ring: 13 100% 59%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply scroll-smooth;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-paper text-ink-900 font-sans antialiased;
+    background-image:
+      radial-gradient(at 100% 0%, rgba(255, 77, 46, 0.04) 0%, transparent 40%),
+      radial-gradient(at 0% 100%, rgba(255, 170, 0, 0.04) 0%, transparent 40%);
+  }
+
+  ::selection {
+    @apply bg-flame-500 text-white;
+  }
+}
+
+@layer components {
+  .container-prose {
+    @apply mx-auto w-full max-w-3xl px-4 sm:px-6;
+  }
+  .container-wide {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .grain-overlay {
+    position: relative;
+  }
+  .grain-overlay::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.12 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.6;
+    mix-blend-mode: multiply;
+    pointer-events: none;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-ink-900 px-6 py-3 text-sm font-medium text-paper transition-all duration-300 hover:bg-flame-500 hover:shadow-[0_8px_30px_-12px_rgba(255,77,46,0.6)] active:scale-[0.98];
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-ink-900/15 px-6 py-3 text-sm font-medium text-ink-900 transition-all hover:border-ink-900 hover:bg-ink-900 hover:text-paper;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-ink-900/12 bg-paper px-3 py-1 text-xs font-medium tracking-wide text-ink-700;
+  }
+
+  .underline-grow {
+    position: relative;
+  }
+  .underline-grow::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: -2px;
+    height: 1px;
+    width: 0%;
+    background: currentColor;
+    transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .underline-grow:hover::after {
+    width: 100%;
+  }
+}
+
+@layer utilities {
+  .text-shadow-soft {
+    text-shadow: 0 2px 30px rgba(10, 10, 6, 0.18);
+  }
+  .mask-gradient-b {
+    mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+  }
+  .mask-gradient-r {
+    mask-image: linear-gradient(to right, black 70%, transparent 100%);
+  }
+}
