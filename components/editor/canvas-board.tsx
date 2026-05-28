@@ -34,7 +34,7 @@ export type CanvasHandle = {
   getFabric: () => FabricCanvas | null;
   addText: (text: string, options?: Partial<Record<string, unknown>>) => void;
   addShape: (kind: ShapeKind) => void;
-  addImage: (file: File) => Promise<void>;
+  addImage: (file: File) => Promise<{ dpi: number } | null>;
   addImageFromUrl: (url: string) => Promise<void>;
   addBackgroundImage: (file: File) => Promise<void>;
   addSticker: (svgString: string) => Promise<void>;
@@ -42,6 +42,9 @@ export type CanvasHandle = {
   setPosition: (props: { left?: number; top?: number; width?: number; height?: number; angle?: number }) => void;
   setTextShadow: (color: string, blur: number, offsetX: number, offsetY: number) => void;
   clearTextShadow: () => void;
+  setTextStroke: (color: string, width: number) => void;
+  setTextGradient: (from: string, to: string, angle: number) => void;
+  toggleGuides: (kind: "bleed" | "safe", visible: boolean) => void;
   setBackground: (bg: BackgroundKind) => void;
   loadTemplate: (tpl: Template) => void;
   exportPNG: () => string;
@@ -81,18 +84,21 @@ type Props = {
   size: EditorSize;
   initialTemplate?: Template | null;
   initialJSON?: object | null;
+  showBleed?: boolean;
+  showSafe?: boolean;
   onSelectionChange?: (obj: FabricObject | null) => void;
   onObjectsChange?: (objects: FabricObject[]) => void;
   onZoomChange?: (zoom: number) => void;
   onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
   onAutoSave?: (json: object) => void;
+  onLowDpiWarning?: (warning: { dpi: number; filename?: string } | null) => void;
 };
 
 const HISTORY_LIMIT = 50;
 const SNAP_THRESHOLD = 20; // px in canvas units
 
 export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
-  { size, initialTemplate, initialJSON, onSelectionChange, onObjectsChange, onZoomChange, onHistoryChange, onAutoSave },
+  { size, initialTemplate, initialJSON, showBleed = true, showSafe = true, onSelectionChange, onObjectsChange, onZoomChange, onHistoryChange, onAutoSave, onLowDpiWarning },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -391,7 +397,7 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
     },
     addImage: async (file) => {
       const fc = fcRef.current;
-      if (!fc) return;
+      if (!fc) return null;
       const url = URL.createObjectURL(file);
       const img = await FabricImage.fromURL(url, { crossOrigin: "anonymous" });
       const maxDim = Math.min(fc.getWidth(), fc.getHeight()) * 0.6;
@@ -401,6 +407,17 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
       fc.add(img);
       fc.setActiveObject(img);
       fc.requestRenderAll();
+
+      // DPI check: at canvas-final scale, what DPI will this print at?
+      const dim = DIMENSIONS[size];
+      const displayedWidthMm = (img.width! * scale) * (25.4 / 300);
+      const effectiveDpi = Math.round(img.width! / (displayedWidthMm / 25.4));
+      if (effectiveDpi < 200) {
+        onLowDpiWarning?.({ dpi: effectiveDpi, filename: file.name });
+      } else {
+        onLowDpiWarning?.(null);
+      }
+      return { dpi: effectiveDpi };
     },
     addImageFromUrl: async (url) => {
       const fc = fcRef.current;
@@ -505,6 +522,46 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
       fc.requestRenderAll();
       fc.fire("object:modified", { target: active });
     },
+    setTextStroke: (color, width) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const active = fc.getActiveObject() as any;
+      if (!active || (active.type !== "textbox" && active.type !== "i-text")) return;
+      active.set({ stroke: width > 0 ? color : null, strokeWidth: width, paintFirst: "stroke" });
+      fc.requestRenderAll();
+      fc.fire("object:modified", { target: active });
+    },
+    setTextGradient: (from, to, angle) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const active = fc.getActiveObject() as any;
+      if (!active || (active.type !== "textbox" && active.type !== "i-text")) return;
+      const width = (active.width ?? 1000) * (active.scaleX ?? 1);
+      const height = (active.height ?? 200) * (active.scaleY ?? 1);
+      const rad = (angle - 90) * Math.PI / 180;
+      active.set({
+        fill: new Gradient({
+          type: "linear",
+          coords: {
+            x1: 0, y1: 0,
+            x2: width * Math.cos(rad),
+            y2: height * Math.sin(rad),
+          },
+          colorStops: [
+            { offset: 0, color: from },
+            { offset: 1, color: to },
+          ],
+        }),
+      });
+      fc.requestRenderAll();
+      fc.fire("object:modified", { target: active });
+    },
+    toggleGuides: (kind, visible) => {
+      // Triggers a re-render of the overlay
+      // Actual toggle is handled by the parent via showBleed/showSafe props
+      const fc = fcRef.current;
+      if (fc) fc.requestRenderAll();
+    },
     addSticker: async (svgString) => {
       const fc = fcRef.current;
       if (!fc) return;
@@ -587,17 +644,65 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
       const { PDFDocument, rgb } = await import("pdf-lib");
       const png = fc.toDataURL({ format: "png", quality: 1, multiplier: 1 });
       const dim = DIMENSIONS[size];
-      const ptsPerMm = 2.83465; // 1mm = 2.83465 pt
+      const ptsPerMm = 2.83465;
+
+      // Include bleed area in PDF page size
+      const pageWidthMm = dim.mm.w + dim.bleedMm * 2;
+      const pageHeightMm = dim.mm.h + dim.bleedMm * 2;
+      const pageWidthPt = pageWidthMm * ptsPerMm;
+      const pageHeightPt = pageHeightMm * ptsPerMm;
+      const bleedPt = dim.bleedMm * ptsPerMm;
+      const trimWidthPt = dim.mm.w * ptsPerMm;
+      const trimHeightPt = dim.mm.h * ptsPerMm;
+
       const pdf = await PDFDocument.create();
-      const page = pdf.addPage([dim.mm.w * ptsPerMm, dim.mm.h * ptsPerMm]);
+      const page = pdf.addPage([pageWidthPt, pageHeightPt]);
+
       const pngBytes = Uint8Array.from(atob(png.split(",")[1]), (c) => c.charCodeAt(0));
       const img = await pdf.embedPng(pngBytes);
+      // Draw the design centered in the bleed area
       page.drawImage(img, {
-        x: 0,
-        y: 0,
-        width: dim.mm.w * ptsPerMm,
-        height: dim.mm.h * ptsPerMm,
+        x: bleedPt,
+        y: bleedPt,
+        width: trimWidthPt,
+        height: trimHeightPt,
       });
+
+      // Crop marks — 5mm long lines at each corner, 3mm outside trim
+      const markLen = 5 * ptsPerMm;
+      const markOff = 1.5 * ptsPerMm; // small gap from trim line
+      const black = rgb(0, 0, 0);
+      const lw = 0.5;
+      const x0 = bleedPt;
+      const y0 = bleedPt;
+      const x1 = bleedPt + trimWidthPt;
+      const y1 = bleedPt + trimHeightPt;
+
+      // Top-left
+      page.drawLine({ start: { x: x0 - markOff - markLen, y: y1 }, end: { x: x0 - markOff, y: y1 }, color: black, thickness: lw });
+      page.drawLine({ start: { x: x0, y: y1 + markOff }, end: { x: x0, y: y1 + markOff + markLen }, color: black, thickness: lw });
+      // Top-right
+      page.drawLine({ start: { x: x1 + markOff, y: y1 }, end: { x: x1 + markOff + markLen, y: y1 }, color: black, thickness: lw });
+      page.drawLine({ start: { x: x1, y: y1 + markOff }, end: { x: x1, y: y1 + markOff + markLen }, color: black, thickness: lw });
+      // Bottom-left
+      page.drawLine({ start: { x: x0 - markOff - markLen, y: y0 }, end: { x: x0 - markOff, y: y0 }, color: black, thickness: lw });
+      page.drawLine({ start: { x: x0, y: y0 - markOff }, end: { x: x0, y: y0 - markOff - markLen }, color: black, thickness: lw });
+      // Bottom-right
+      page.drawLine({ start: { x: x1 + markOff, y: y0 }, end: { x: x1 + markOff + markLen, y: y0 }, color: black, thickness: lw });
+      page.drawLine({ start: { x: x1, y: y0 - markOff }, end: { x: x1, y: y0 - markOff - markLen }, color: black, thickness: lw });
+
+      // PDF metadata
+      pdf.setTitle(`Click Print Flyer ${size}`);
+      pdf.setProducer("Click Print Editor");
+      pdf.setCreationDate(new Date());
+
+      // Set TrimBox so printer software knows where trim line is
+      const pageRef = page.ref;
+      // Note: pdf-lib doesn't have first-class TrimBox API; we set via setMediaBox
+      page.setMediaBox(0, 0, pageWidthPt, pageHeightPt);
+      page.setTrimBox(bleedPt, bleedPt, trimWidthPt, trimHeightPt);
+      page.setBleedBox(0, 0, pageWidthPt, pageHeightPt);
+
       return await pdf.save();
     },
     exportJSON: () => {
@@ -897,6 +1002,12 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
     },
   }));
 
+  const dim = DIMENSIONS[size];
+  const bleedPercent = (dim.bleedPx / dim.px.w) * 100;
+  const bleedPercentH = (dim.bleedPx / dim.px.h) * 100;
+  const safePercent = (dim.safePx / dim.px.w) * 100;
+  const safePercentH = (dim.safePx / dim.px.h) * 100;
+
   return (
     <div
       ref={containerRef}
@@ -909,6 +1020,34 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
           ref={guidesRef}
           className="pointer-events-none absolute inset-0"
         />
+        {/* Bleed line (3mm outside trim — outer red dashed) */}
+        {showBleed && (
+          <div
+            className="pointer-events-none absolute"
+            style={{
+              top: `${-bleedPercentH}%`,
+              left: `${-bleedPercent}%`,
+              right: `${-bleedPercent}%`,
+              bottom: `${-bleedPercentH}%`,
+              border: "2px dashed rgba(255, 77, 46, 0.8)",
+            }}
+            title="Bleed area · printer trims here"
+          />
+        )}
+        {/* Safe area (5mm inside trim — green dashed) */}
+        {showSafe && (
+          <div
+            className="pointer-events-none absolute"
+            style={{
+              top: `${safePercentH}%`,
+              left: `${safePercent}%`,
+              right: `${safePercent}%`,
+              bottom: `${safePercentH}%`,
+              border: "2px dashed rgba(46, 200, 100, 0.5)",
+            }}
+            title="Safe area · keep important content inside"
+          />
+        )}
       </div>
     </div>
   );

@@ -42,6 +42,9 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false, temp
   const [history, setHistory] = useState({ canUndo: false, canRedo: false });
   const [isExporting, setIsExporting] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [showBleed, setShowBleed] = useState(true);
+  const [showSafe, setShowSafe] = useState(true);
+  const [dpiWarning, setDpiWarning] = useState<{ dpi: number; filename?: string } | null>(null);
 
   const [initialTemplate, setInitialTemplate] = useState<Template | null>(null);
   const [initialJSON, setInitialJSON] = useState<object | null>(null);
@@ -209,6 +212,10 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false, temp
         hasOrder={!!orderId}
         hasSelection={!!selected}
         onAlign={(k: AlignKind) => canvasRef.current?.align(k)}
+        showBleed={showBleed}
+        showSafe={showSafe}
+        onToggleBleed={() => setShowBleed((v) => !v)}
+        onToggleSafe={() => setShowSafe((v) => !v)}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -331,11 +338,17 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false, temp
             size={size}
             initialTemplate={initialTemplate}
             initialJSON={initialJSON}
+            showBleed={showBleed}
+            showSafe={showSafe}
             onSelectionChange={setSelected}
             onObjectsChange={setObjects}
             onZoomChange={setZoom}
             onHistoryChange={(canUndo, canRedo) => setHistory({ canUndo, canRedo })}
             onAutoSave={onAutoSave}
+            onLowDpiWarning={(w) => {
+              setDpiWarning(w);
+              if (w) setTimeout(() => setDpiWarning(null), 8000);
+            }}
           />
 
           {/* Auto-save indicator */}
@@ -343,6 +356,21 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false, temp
             <div className="pointer-events-none absolute right-4 top-4 inline-flex animate-fade-up items-center gap-1.5 rounded-full bg-ink-900/85 px-3 py-1.5 text-xs font-medium text-paper backdrop-blur-md">
               <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
               Saved
+            </div>
+          )}
+
+          {/* DPI warning toast */}
+          {dpiWarning && (
+            <div className="absolute left-1/2 top-4 -translate-x-1/2 flex max-w-md items-start gap-3 rounded-2xl border border-saffron-500/30 bg-saffron-500/95 px-4 py-3 text-sm text-ink-900 shadow-[0_10px_30px_-10px_rgba(255,170,0,0.5)]">
+              <span className="text-base">⚠️</span>
+              <div>
+                <div className="font-semibold">Low resolution image</div>
+                <div className="text-xs mt-0.5 text-ink-800">
+                  This image will print at ~{dpiWarning.dpi} DPI. Recommended: 300 DPI.
+                  Smaller display will improve quality. Consider higher-resolution source.
+                </div>
+              </div>
+              <button onClick={() => setDpiWarning(null)} className="rounded p-1 text-ink-700 hover:bg-ink-900/10">✕</button>
             </div>
           )}
 
@@ -387,6 +415,11 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false, temp
           onToggleTextStyle={(style) => canvasRef.current?.toggleTextStyle(style)}
           onSetTextProperty={(key, value) => canvasRef.current?.setTextProperty(key, value)}
           onFlip={(axis) => canvasRef.current?.flipSelected(axis)}
+          onSetTextStroke={(color, width) => canvasRef.current?.setTextStroke(color, width)}
+          onSetTextGradient={(from, to, angle) => canvasRef.current?.setTextGradient(from, to, angle)}
+          onSetTextShadow={(color, blur, ox, oy) => canvasRef.current?.setTextShadow(color, blur, ox, oy)}
+          onClearTextShadow={() => canvasRef.current?.clearTextShadow()}
+          onSetPosition={(props) => canvasRef.current?.setPosition(props)}
         />
       </div>
     </div>

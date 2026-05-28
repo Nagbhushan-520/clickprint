@@ -14,6 +14,11 @@ export function PropertiesPanel({
   onToggleTextStyle,
   onSetTextProperty,
   onFlip,
+  onSetTextStroke,
+  onSetTextGradient,
+  onSetTextShadow,
+  onClearTextShadow,
+  onSetPosition,
 }: {
   selected: FabricObject | null;
   onChange: () => void;
@@ -22,6 +27,11 @@ export function PropertiesPanel({
   onToggleTextStyle?: (style: "bold" | "italic" | "underline") => void;
   onSetTextProperty?: (key: "lineHeight" | "charSpacing", value: number) => void;
   onFlip?: (axis: "horizontal" | "vertical") => void;
+  onSetTextStroke?: (color: string, width: number) => void;
+  onSetTextGradient?: (from: string, to: string, angle: number) => void;
+  onSetTextShadow?: (color: string, blur: number, offsetX: number, offsetY: number) => void;
+  onClearTextShadow?: () => void;
+  onSetPosition?: (props: { left?: number; top?: number; width?: number; height?: number; angle?: number }) => void;
 }) {
   if (!selected) {
     return (
@@ -55,6 +65,15 @@ export function PropertiesPanel({
                 obj={selected}
                 onToggle={onToggleTextStyle}
                 onSetProperty={onSetTextProperty}
+              />
+            )}
+            {onSetTextStroke && onSetTextGradient && onSetTextShadow && onClearTextShadow && (
+              <TextEffectsRows
+                obj={selected}
+                onSetStroke={onSetTextStroke}
+                onSetGradient={onSetTextGradient}
+                onSetShadow={onSetTextShadow}
+                onClearShadow={onClearTextShadow}
               />
             )}
           </>
@@ -366,6 +385,118 @@ function StrokeRow({ obj, onChange }: { obj: FabricObject; onChange: () => void 
         />
         <span className="text-xs text-ink-500">px</span>
       </div>
+    </div>
+  );
+}
+
+function TextEffectsRows({
+  obj,
+  onSetStroke,
+  onSetGradient,
+  onSetShadow,
+  onClearShadow,
+}: {
+  obj: FabricObject;
+  onSetStroke: (color: string, width: number) => void;
+  onSetGradient: (from: string, to: string, angle: number) => void;
+  onSetShadow: (color: string, blur: number, offsetX: number, offsetY: number) => void;
+  onClearShadow: () => void;
+}) {
+  const [effect, setEffect] = useState<"none" | "shadow" | "outline" | "gradient">("none");
+  const [shadowColor, setShadowColor] = useState("#0A0A06");
+  const [shadowBlur, setShadowBlur] = useState(8);
+  const [shadowOffset, setShadowOffset] = useState(6);
+  const [strokeColor, setStrokeColor] = useState("#0A0A06");
+  const [strokeWidth, setStrokeWidth] = useState(8);
+  const [gradFrom, setGradFrom] = useState("#FF4D2E");
+  const [gradTo, setGradTo] = useState("#FFAA00");
+  const [gradAngle, setGradAngle] = useState(135);
+
+  return (
+    <div>
+      <Label>Text effect</Label>
+      <div className="mt-2 grid grid-cols-4 gap-1.5">
+        {(["none", "shadow", "outline", "gradient"] as const).map((e) => (
+          <button
+            key={e}
+            onClick={() => {
+              setEffect(e);
+              if (e === "none") {
+                onClearShadow();
+                onSetStroke("#000000", 0);
+              } else if (e === "shadow") {
+                onSetShadow(shadowColor, shadowBlur, shadowOffset, shadowOffset);
+              } else if (e === "outline") {
+                onSetStroke(strokeColor, strokeWidth);
+              } else if (e === "gradient") {
+                onSetGradient(gradFrom, gradTo, gradAngle);
+              }
+            }}
+            className={cn(
+              "rounded-md border px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
+              effect === e
+                ? "border-ink-900 bg-ink-900 text-paper"
+                : "border-ink-900/15 text-ink-700 hover:border-ink-900/40",
+            )}
+          >
+            {e}
+          </button>
+        ))}
+      </div>
+
+      {effect === "shadow" && (
+        <div className="mt-3 space-y-2 rounded-lg border border-ink-900/8 bg-cream p-3">
+          <div className="flex items-center gap-2">
+            <input type="color" value={shadowColor} onChange={(e) => { setShadowColor(e.target.value); onSetShadow(e.target.value, shadowBlur, shadowOffset, shadowOffset); }} className="h-8 w-8 cursor-pointer rounded border" />
+            <span className="text-[10px] text-ink-500">Shadow color</span>
+          </div>
+          <FxSlider label="Blur" min={0} max={50} value={shadowBlur} onChange={(v) => { setShadowBlur(v); onSetShadow(shadowColor, v, shadowOffset, shadowOffset); }} />
+          <FxSlider label="Distance" min={0} max={30} value={shadowOffset} onChange={(v) => { setShadowOffset(v); onSetShadow(shadowColor, shadowBlur, v, v); }} />
+        </div>
+      )}
+
+      {effect === "outline" && (
+        <div className="mt-3 space-y-2 rounded-lg border border-ink-900/8 bg-cream p-3">
+          <div className="flex items-center gap-2">
+            <input type="color" value={strokeColor} onChange={(e) => { setStrokeColor(e.target.value); onSetStroke(e.target.value, strokeWidth); }} className="h-8 w-8 cursor-pointer rounded border" />
+            <span className="text-[10px] text-ink-500">Outline color</span>
+          </div>
+          <FxSlider label="Width" min={0} max={20} value={strokeWidth} onChange={(v) => { setStrokeWidth(v); onSetStroke(strokeColor, v); }} />
+        </div>
+      )}
+
+      {effect === "gradient" && (
+        <div className="mt-3 space-y-2 rounded-lg border border-ink-900/8 bg-cream p-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <span className="text-[10px] text-ink-500">From</span>
+              <input type="color" value={gradFrom} onChange={(e) => { setGradFrom(e.target.value); onSetGradient(e.target.value, gradTo, gradAngle); }} className="mt-1 h-8 w-full cursor-pointer rounded border" />
+            </div>
+            <div>
+              <span className="text-[10px] text-ink-500">To</span>
+              <input type="color" value={gradTo} onChange={(e) => { setGradTo(e.target.value); onSetGradient(gradFrom, e.target.value, gradAngle); }} className="mt-1 h-8 w-full cursor-pointer rounded border" />
+            </div>
+          </div>
+          <FxSlider label="Angle" min={0} max={360} value={gradAngle} onChange={(v) => { setGradAngle(v); onSetGradient(gradFrom, gradTo, v); }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FxSlider({ label, min, max, value, onChange }: { label: string; min: number; max: number; value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-14 text-[10px] uppercase tracking-widest text-ink-500">{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="flex-1 accent-flame-500"
+      />
+      <span className="w-8 text-right font-mono text-[10px] text-ink-700">{value}</span>
     </div>
   );
 }

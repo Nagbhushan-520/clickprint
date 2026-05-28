@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Undo2, Redo2, Download, ArrowLeft, Loader2, ChevronDown } from "lucide-react";
+import { Undo2, Redo2, Download, ArrowLeft, Loader2, Eye, EyeOff } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
 import type { EditorSize } from "@/lib/editor/dimensions";
@@ -20,6 +20,10 @@ export function TopToolbar({
   hasOrder,
   hasSelection,
   onAlign,
+  showBleed,
+  showSafe,
+  onToggleBleed,
+  onToggleSafe,
 }: {
   size: EditorSize;
   onSizeChange: (s: EditorSize) => void;
@@ -32,6 +36,10 @@ export function TopToolbar({
   hasOrder: boolean;
   hasSelection: boolean;
   onAlign: (k: AlignKind) => void;
+  showBleed: boolean;
+  showSafe: boolean;
+  onToggleBleed: () => void;
+  onToggleSafe: () => void;
 }) {
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-ink-900/8 bg-paper px-3 md:px-4">
@@ -44,8 +52,36 @@ export function TopToolbar({
         <SizeSwitcher size={size} onChange={onSizeChange} />
       </div>
 
-      <div className="hidden md:block">
+      <div className="hidden items-center gap-2 md:flex">
         <AlignmentBar onAlign={onAlign} hasSelection={hasSelection} />
+        <div className="h-5 w-px bg-ink-900/15" />
+        {/* Print guide toggles */}
+        <button
+          onClick={onToggleBleed}
+          title="Toggle bleed area (3mm)"
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold transition-colors",
+            showBleed
+              ? "bg-flame-500/15 text-flame-700"
+              : "border border-ink-900/10 text-ink-600 hover:bg-ink-900/5",
+          )}
+        >
+          <span className={cn("h-2 w-2 rounded-full", showBleed ? "bg-flame-500" : "bg-ink-300")} />
+          Bleed
+        </button>
+        <button
+          onClick={onToggleSafe}
+          title="Toggle safe area (5mm)"
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold transition-colors",
+            showSafe
+              ? "bg-green-100 text-green-800"
+              : "border border-ink-900/10 text-ink-600 hover:bg-ink-900/5",
+          )}
+        >
+          <span className={cn("h-2 w-2 rounded-full", showSafe ? "bg-green-500" : "bg-ink-300")} />
+          Safe
+        </button>
       </div>
 
       <div className="flex items-center gap-2">
