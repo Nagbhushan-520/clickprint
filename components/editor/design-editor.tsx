@@ -14,6 +14,8 @@ import { PanelLayers } from "./panel-layers";
 import { PanelAi } from "./panel-ai";
 import { PanelStickers } from "./panel-stickers";
 import { PanelBrandKit } from "./panel-brand-kit";
+import { PanelQRCode } from "./panel-qrcode";
+import { PanelPhotos } from "./panel-photos";
 import { PropertiesPanel } from "./properties-panel";
 import { ZoomIn, ZoomOut, Maximize, Save, CheckCircle2 } from "lucide-react";
 import type { EditorSize } from "@/lib/editor/dimensions";
@@ -24,11 +26,12 @@ type Props = {
   orderId?: string;
   initialSize?: EditorSize;
   aiMode?: boolean;
+  templateId?: string;
 };
 
 const AUTOSAVE_KEY = "clickprint_editor_autosave";
 
-export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Props) {
+export function DesignEditor({ orderId, initialSize = "A5", aiMode = false, templateId }: Props) {
   const router = useRouter();
   const canvasRef = useRef<CanvasHandle>(null);
   const [size, setSize] = useState<EditorSize>(initialSize);
@@ -43,9 +46,20 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Pr
   const [initialTemplate, setInitialTemplate] = useState<Template | null>(null);
   const [initialJSON, setInitialJSON] = useState<object | null>(null);
 
-  // On mount, decide whether to load autosave or template
+  // On mount, decide what to initialize with
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    // If templateId is specified, load that template (overrides autosave)
+    if (templateId) {
+      const tpl = TEMPLATES.find((t) => t.id === templateId);
+      if (tpl) {
+        setSize(tpl.size);
+        setInitialTemplate(tpl);
+        return;
+      }
+    }
+
     const saved = window.localStorage.getItem(AUTOSAVE_KEY);
     if (saved) {
       try {
@@ -238,6 +252,20 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Pr
             {panel === "stickers" && (
               <PanelStickers
                 onAdd={(svg) => canvasRef.current?.addSticker(svg)}
+              />
+            )}
+            {panel === "photos" && (
+              <PanelPhotos
+                onAdd={async (url) => {
+                  await canvasRef.current?.addImageFromUrl(url);
+                }}
+              />
+            )}
+            {panel === "qrcode" && (
+              <PanelQRCode
+                onAdd={async (data, color, bg) => {
+                  await canvasRef.current?.addQRCode(data, color, bg);
+                }}
               />
             )}
             {panel === "brand-kit" && (

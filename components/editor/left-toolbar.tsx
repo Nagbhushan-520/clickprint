@@ -1,10 +1,10 @@
 "use client";
 
 import { useRef } from "react";
-import { LayoutTemplate, Type, Square, Image as ImageIcon, Layers, Sparkles, Palette, Smile, Bookmark } from "lucide-react";
+import { LayoutTemplate, Type, Square, Image as ImageIcon, Layers, Sparkles, Palette, Smile, Bookmark, QrCode, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type Panel = "templates" | "text" | "shapes" | "images" | "layers" | "ai" | "background" | "stickers" | "brand-kit" | null;
+export type Panel = "templates" | "text" | "shapes" | "images" | "photos" | "layers" | "ai" | "background" | "stickers" | "brand-kit" | "qrcode" | null;
 
 export function LeftToolbar({
   active,
@@ -22,7 +22,9 @@ export function LeftToolbar({
     { id: "text", label: "Text", icon: Type },
     { id: "shapes", label: "Shapes", icon: Square },
     { id: "stickers", label: "Stickers", icon: Smile },
-    { id: "images", label: "Images", icon: ImageIcon },
+    { id: "photos", label: "Photos", icon: Camera },
+    { id: "images", label: "Upload", icon: ImageIcon },
+    { id: "qrcode", label: "QR Code", icon: QrCode },
     { id: "ai", label: "AI", icon: Sparkles },
     { id: "background", label: "Background", icon: Palette },
     { id: "brand-kit", label: "Brand kit", icon: Bookmark },

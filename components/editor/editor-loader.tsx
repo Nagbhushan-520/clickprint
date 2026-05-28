@@ -24,10 +24,12 @@ export function EditorLoader({
   orderId,
   initialSize,
   aiMode,
+  templateId,
 }: {
   orderId?: string;
   initialSize: EditorSize;
   aiMode: boolean;
+  templateId?: string;
 }) {
-  return <DesignEditor orderId={orderId} initialSize={initialSize} aiMode={aiMode} />;
+  return <DesignEditor orderId={orderId} initialSize={initialSize} aiMode={aiMode} templateId={templateId} />;
 }

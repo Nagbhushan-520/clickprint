@@ -15,10 +15,12 @@ import {
   Group,
   Gradient,
   ActiveSelection,
+  Shadow,
   filters as fabricFilters,
   loadSVGFromString,
   util as fabricUtil,
 } from "fabric";
+import QRCode from "qrcode";
 import { DIMENSIONS, type EditorSize, computeFitZoom } from "@/lib/editor/dimensions";
 import { loadFont, preloadAllFonts } from "@/lib/editor/fonts";
 import type { Template, TemplateObject } from "@/lib/editor/templates";
@@ -36,6 +38,10 @@ export type CanvasHandle = {
   addImageFromUrl: (url: string) => Promise<void>;
   addBackgroundImage: (file: File) => Promise<void>;
   addSticker: (svgString: string) => Promise<void>;
+  addQRCode: (data: string, color?: string, bgColor?: string) => Promise<void>;
+  setPosition: (props: { left?: number; top?: number; width?: number; height?: number; angle?: number }) => void;
+  setTextShadow: (color: string, blur: number, offsetX: number, offsetY: number) => void;
+  clearTextShadow: () => void;
   setBackground: (bg: BackgroundKind) => void;
   loadTemplate: (tpl: Template) => void;
   exportPNG: () => string;
@@ -431,6 +437,73 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
       fc.add(img);
       fc.sendObjectToBack(img);
       fc.requestRenderAll();
+    },
+    addQRCode: async (data, color = "#0A0A06", bgColor = "#FFFCF5") => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const svg = await QRCode.toString(data, {
+        type: "svg",
+        width: 400,
+        margin: 1,
+        color: { dark: color, light: bgColor },
+        errorCorrectionLevel: "M",
+      });
+      const result = await loadSVGFromString(svg);
+      const group = fabricUtil.groupSVGElements(result.objects as FabricObject[], result.options);
+      const targetSize = Math.min(fc.getWidth(), fc.getHeight()) * 0.2;
+      const scale = targetSize / Math.max(group.width ?? 400, group.height ?? 400);
+      group.scale(scale);
+      group.set({ left: 200, top: 200 });
+      fc.add(group);
+      fc.setActiveObject(group);
+      fc.requestRenderAll();
+    },
+    setPosition: ({ left, top, width, height, angle }) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const active = fc.getActiveObject();
+      if (!active) return;
+      const updates: Record<string, number> = {};
+      if (left !== undefined) updates.left = left;
+      if (top !== undefined) updates.top = top;
+      if (angle !== undefined) updates.angle = angle;
+      if (width !== undefined) {
+        const w = (active as any).width ?? 1;
+        updates.scaleX = width / w;
+      }
+      if (height !== undefined) {
+        const h = (active as any).height ?? 1;
+        updates.scaleY = height / h;
+      }
+      active.set(updates);
+      active.setCoords();
+      fc.requestRenderAll();
+      fc.fire("object:modified", { target: active });
+    },
+    setTextShadow: (color, blur, offsetX, offsetY) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const active = fc.getActiveObject() as any;
+      if (!active || (active.type !== "textbox" && active.type !== "i-text")) return;
+      active.set({
+        shadow: new Shadow({
+          color,
+          blur,
+          offsetX,
+          offsetY,
+        }),
+      });
+      fc.requestRenderAll();
+      fc.fire("object:modified", { target: active });
+    },
+    clearTextShadow: () => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const active = fc.getActiveObject() as any;
+      if (!active) return;
+      active.set({ shadow: null });
+      fc.requestRenderAll();
+      fc.fire("object:modified", { target: active });
     },
     addSticker: async (svgString) => {
       const fc = fcRef.current;

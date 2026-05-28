@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export default async function DesignPage({
   searchParams,
 }: {
-  searchParams: Promise<{ orderId?: string; ai?: string; size?: string }>;
+  searchParams: Promise<{ orderId?: string; ai?: string; size?: string; template?: string }>;
 }) {
   const params = await searchParams;
   const order = params.orderId ? await getOrder(params.orderId) : null;
@@ -30,6 +30,7 @@ export default async function DesignPage({
       orderId={order?.id}
       initialSize={initialSize}
       aiMode={!!params.ai}
+      templateId={params.template}
     />
   );
 }
