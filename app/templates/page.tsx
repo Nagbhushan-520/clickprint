@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { TEMPLATES, TEMPLATE_CATEGORIES, type TemplateCategory } from "@/lib/editor/templates";
-import { TemplateThumb } from "@/components/editor/panel-templates";
+import { TemplateThumbCanvas } from "@/components/editor/template-thumb-canvas";
 import { cn } from "@/lib/utils";
 
 export default function TemplatesPage() {
@@ -75,7 +75,7 @@ export default function TemplatesPage() {
               href={`/design?template=${tpl.id}`}
               className="group overflow-hidden rounded-2xl border border-ink-900/8 bg-paper transition-all hover:border-ink-900/40 hover:shadow-[0_20px_40px_-20px_rgba(10,10,6,0.3)] hover:-translate-y-1"
             >
-              <TemplateThumb tpl={tpl} />
+              <TemplateThumbCanvas tpl={tpl} width={300} />
               <div className="p-4">
                 <h3 className="truncate font-display text-base font-bold tracking-tight text-ink-900">
                   {tpl.name}

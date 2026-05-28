@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, FlipHorizontal, FlipVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ImageFilterKind } from "./canvas-board";
+import { PositionPanel } from "./position-panel";
 
 export function PropertiesPanel({
   selected,
@@ -107,6 +108,11 @@ export function PropertiesPanel({
           </div>
         )}
         <OpacityRow obj={selected} onChange={onChange} />
+        {onSetPosition && (
+          <div className="border-t border-ink-900/8 pt-4">
+            <PositionPanel selected={selected} onSetPosition={onSetPosition} />
+          </div>
+        )}
       </div>
     </aside>
   );

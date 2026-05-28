@@ -4,6 +4,7 @@ import { useState } from "react";
 import { TEMPLATES, TEMPLATE_CATEGORIES, type Template, type TemplateCategory } from "@/lib/editor/templates";
 import type { EditorSize } from "@/lib/editor/dimensions";
 import { cn } from "@/lib/utils";
+import { TemplateThumbCanvas } from "./template-thumb-canvas";
 
 export function PanelTemplates({
   currentSize,
@@ -66,7 +67,7 @@ export function PanelTemplates({
             onClick={() => onSelect(tpl)}
             className="group overflow-hidden rounded-xl border border-ink-900/8 bg-paper transition-all hover:border-ink-900/40 hover:shadow-md hover:-translate-y-0.5"
           >
-            <TemplateThumb tpl={tpl} />
+            <TemplateThumbCanvas tpl={tpl} width={200} />
             <div className="px-2 py-2 text-left">
               <div className="truncate text-xs font-semibold text-ink-900">{tpl.name}</div>
               <div className="flex items-center justify-between">

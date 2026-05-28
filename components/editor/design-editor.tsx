@@ -16,6 +16,7 @@ import { PanelStickers } from "./panel-stickers";
 import { PanelBrandKit } from "./panel-brand-kit";
 import { PanelQRCode } from "./panel-qrcode";
 import { PanelPhotos } from "./panel-photos";
+import { PagesBar, type Page } from "./pages-bar";
 import { PropertiesPanel } from "./properties-panel";
 import { ZoomIn, ZoomOut, Maximize, Save, CheckCircle2 } from "lucide-react";
 import type { EditorSize } from "@/lib/editor/dimensions";
@@ -45,6 +46,86 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false, temp
   const [showBleed, setShowBleed] = useState(true);
   const [showSafe, setShowSafe] = useState(true);
   const [dpiWarning, setDpiWarning] = useState<{ dpi: number; filename?: string } | null>(null);
+
+  // Multi-page state
+  const [pages, setPages] = useState<Page[]>([{ id: "p1", name: "Front", json: null }]);
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
+
+  // Page operations
+  const persistCurrentPage = () => {
+    const fc = canvasRef.current?.getFabric();
+    if (!fc) return;
+    const json = fc.toJSON();
+    setPages((ps) => {
+      const next = [...ps];
+      if (next[currentPageIndex]) next[currentPageIndex] = { ...next[currentPageIndex], json };
+      return next;
+    });
+  };
+
+  const switchToPage = (index: number) => {
+    if (index === currentPageIndex) return;
+    persistCurrentPage();
+    const target = pages[index];
+    if (!target) return;
+    setCurrentPageIndex(index);
+    setTimeout(() => {
+      if (target.json) canvasRef.current?.loadJSON(target.json);
+      else {
+        // Blank page
+        const fc = canvasRef.current?.getFabric();
+        if (fc) {
+          fc.clear();
+          fc.backgroundColor = "#FFFCF5";
+          fc.requestRenderAll();
+        }
+      }
+    }, 50);
+  };
+
+  const addBlankPage = () => {
+    persistCurrentPage();
+    const newPage: Page = {
+      id: `p${Date.now()}`,
+      name: `Page ${pages.length + 1}`,
+      json: null,
+    };
+    setPages((ps) => [...ps, newPage]);
+    setCurrentPageIndex(pages.length);
+    setTimeout(() => {
+      const fc = canvasRef.current?.getFabric();
+      if (fc) {
+        fc.clear();
+        fc.backgroundColor = "#FFFCF5";
+        fc.requestRenderAll();
+      }
+    }, 50);
+  };
+
+  const duplicatePage = () => {
+    persistCurrentPage();
+    const fc = canvasRef.current?.getFabric();
+    if (!fc) return;
+    const json = fc.toJSON();
+    const newPage: Page = {
+      id: `p${Date.now()}`,
+      name: `${pages[currentPageIndex]?.name ?? "Page"} copy`,
+      json,
+    };
+    setPages((ps) => [...ps, newPage]);
+    setCurrentPageIndex(pages.length);
+  };
+
+  const deletePage = () => {
+    if (pages.length <= 1) return;
+    setPages((ps) => ps.filter((_, i) => i !== currentPageIndex));
+    const newIndex = Math.max(0, currentPageIndex - 1);
+    setCurrentPageIndex(newIndex);
+    setTimeout(() => {
+      const target = pages[newIndex];
+      if (target?.json) canvasRef.current?.loadJSON(target.json);
+    }, 50);
+  };
 
   const [initialTemplate, setInitialTemplate] = useState<Template | null>(null);
   const [initialJSON, setInitialJSON] = useState<object | null>(null);
@@ -422,6 +503,16 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false, temp
           onSetPosition={(props) => canvasRef.current?.setPosition(props)}
         />
       </div>
+
+      {/* Pages bar */}
+      <PagesBar
+        pages={pages}
+        currentIndex={currentPageIndex}
+        onSelect={switchToPage}
+        onAddBlank={addBlankPage}
+        onDuplicate={duplicatePage}
+        onDelete={deletePage}
+      />
     </div>
   );
 }
