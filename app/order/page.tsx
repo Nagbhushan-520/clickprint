@@ -1,9 +1,13 @@
 import { Configurator } from "@/components/order/configurator";
 
-export const metadata = {
-  title: "Order Flyers · Click Print",
-  description: "Configure your flyer order — paper, size, sides, quantity. Live pricing.",
-};
+import { pageMetadata } from "@/lib/config/site";
+
+export const metadata = pageMetadata({
+  title: "Order Flyers — Live Pricing Configurator",
+  description: "Configure your flyer order in 30 seconds. Pick color, paper GSM, A4 or A5 size, sides, and quantity. Live price updates as you go. UPI, card, netbanking checkout via Razorpay.",
+  path: "/order",
+  keywords: ["order flyers online", "flyer configurator", "live flyer pricing"],
+});
 
 export default async function OrderPage({
   searchParams,

@@ -3,10 +3,14 @@ import { redirect } from "next/navigation";
 import { CheckoutFlow } from "@/components/checkout/checkout-flow";
 import { getOrder } from "@/lib/store/orders";
 
-export const metadata = {
-  title: "Checkout · Click Print",
-  description: "Pay securely via Razorpay. UPI, cards, netbanking, wallets.",
-};
+import { pageMetadata } from "@/lib/config/site";
+
+export const metadata = pageMetadata({
+  title: "Checkout",
+  description: "Secure flyer printing payment via Razorpay. UPI, cards, netbanking, wallets accepted.",
+  path: "/checkout",
+  noIndex: true,
+});
 
 export const dynamic = "force-dynamic";
 

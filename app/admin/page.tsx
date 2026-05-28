@@ -2,12 +2,16 @@ import Link from "next/link";
 import { Package, IndianRupee, Clock, CheckCircle2, ExternalLink, FileText } from "lucide-react";
 import { listOrders, STATUS_COLOR, STATUS_LABEL } from "@/lib/store/orders";
 import { formatINR } from "@/lib/utils";
+import { pageMetadata } from "@/lib/config/site";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "Admin · Orders · Click Print",
-};
+export const metadata = pageMetadata({
+  title: "Admin Orders",
+  description: "Internal admin dashboard.",
+  path: "/admin",
+  noIndex: true,
+});
 
 export default async function AdminPage() {
   const orders = await listOrders();

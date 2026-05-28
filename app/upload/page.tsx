@@ -4,10 +4,13 @@ import { ArrowLeft } from "lucide-react";
 import { UploadFlow } from "@/components/upload/upload-flow";
 import { getOrder } from "@/lib/store/orders";
 
-export const metadata = {
-  title: "Upload Your Design · Click Print",
-  description: "Upload your print-ready file. PDF, JPG, or PNG. We'll check DPI before you pay.",
-};
+import { pageMetadata } from "@/lib/config/site";
+
+export const metadata = pageMetadata({
+  title: "Upload Your Flyer Design",
+  description: "Upload your print-ready PDF, JPG, or PNG. We validate DPI and file integrity before you pay. 25 MB max, 300 DPI recommended.",
+  path: "/upload",
+});
 
 export const dynamic = "force-dynamic";
 

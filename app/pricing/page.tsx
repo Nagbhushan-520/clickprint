@@ -9,10 +9,16 @@ import {
 } from "@/lib/config/pricing";
 import { formatINR } from "@/lib/utils";
 
-export const metadata = {
-  title: "Pricing · Click Print",
-  description: "Full price matrix for A4 and A5 flyers. Single or multi-color, every quantity tier and paper option.",
-};
+import { JsonLd } from "@/components/seo/json-ld";
+import { breadcrumbSchema } from "@/lib/seo/structured-data";
+import { pageMetadata } from "@/lib/config/site";
+
+export const metadata = pageMetadata({
+  title: "Flyer Printing Pricing — A4 & A5 Bulk Rates",
+  description: "Full A4 and A5 flyer printing price matrix. Single color from ₹0.84/flyer, full color from ₹1.90/flyer. Bulk discounts up to 34% on 5,000 flyers. All prices include 18% GST.",
+  path: "/pricing",
+  keywords: ["flyer printing price", "bulk flyer rates", "A4 flyer cost", "A5 flyer cost", "GST flyer printing"],
+});
 
 type MatrixSection = {
   title: string;
@@ -34,6 +40,12 @@ const SECTIONS: MatrixSection[] = [
 export default function PricingPage() {
   return (
     <div className="pt-24 pb-32 md:pt-32">
+      <JsonLd
+        data={breadcrumbSchema([
+          { name: "Home", url: "/" },
+          { name: "Pricing", url: "/pricing" },
+        ])}
+      />
       <div className="container-wide">
         <div className="max-w-2xl">
           <div className="chip">Pricing</div>

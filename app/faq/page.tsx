@@ -8,11 +8,16 @@ import {
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { brand } from "@/lib/config/brand";
+import { JsonLd } from "@/components/seo/json-ld";
+import { faqSchema, breadcrumbSchema } from "@/lib/seo/structured-data";
+import { pageMetadata } from "@/lib/config/site";
 
-export const metadata = {
-  title: "FAQ · Click Print",
-  description: "Frequently asked questions about flyer printing, file formats, turnaround, paper, payment, delivery, and the design tool.",
-};
+export const metadata = pageMetadata({
+  title: "Flyer Printing FAQ — File Formats, Paper, Pricing, Delivery",
+  description: "Common questions about Click Print flyer printing in Bangalore: accepted file formats, paper choices, GST and pricing, turnaround and delivery, design tool, and AI generation.",
+  path: "/faq",
+  keywords: ["flyer printing FAQ", "PDF flyer format", "GSM paper guide", "flyer DPI requirements"],
+});
 
 type FAQ = { q: string; a: React.ReactNode };
 
@@ -129,9 +134,45 @@ const SECTIONS: { title: string; items: FAQ[] }[] = [
   },
 ];
 
+// Flatten FAQ sections into a plain array for schema.org markup
+function getFlatFaqs(): { question: string; answer: string }[] {
+  const result: { question: string; answer: string }[] = [];
+  for (const section of SECTIONS) {
+    for (const item of section.items) {
+      const answer = typeof item.a === "string"
+        ? item.a
+        : item.a && typeof item.a === "object" && "props" in item.a
+          ? extractText(item.a as React.ReactElement)
+          : "";
+      result.push({ question: item.q, answer });
+    }
+  }
+  return result;
+}
+
+function extractText(node: React.ReactElement | string | null | undefined): string {
+  if (!node) return "";
+  if (typeof node === "string") return node;
+  if (Array.isArray(node)) return node.map(extractText as any).join(" ");
+  const children = (node as any).props?.children;
+  if (children == null) return "";
+  if (Array.isArray(children)) return children.map(extractText as any).join(" ");
+  if (typeof children === "string") return children;
+  return extractText(children as React.ReactElement);
+}
+
 export default function FAQPage() {
   return (
     <div className="pt-24 pb-32 md:pt-32">
+      <JsonLd
+        data={[
+          faqSchema(getFlatFaqs()),
+          breadcrumbSchema([
+            { name: "Home", url: "/" },
+            { name: "FAQ", url: "/faq" },
+          ]),
+        ]}
+      />
       <div className="container-wide">
         <div className="max-w-2xl">
           <div className="chip">FAQ</div>

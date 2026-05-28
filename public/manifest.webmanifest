@@ -1,0 +1,17 @@
+{
+  "name": "Click Print",
+  "short_name": "Click Print",
+  "description": "Premium flyer printing in Bangalore. A4 and A5 in single or full color with an in-browser design tool and AI generation.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFCF5",
+  "theme_color": "#FF4D2E",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

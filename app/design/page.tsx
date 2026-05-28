@@ -1,10 +1,14 @@
 import { getOrder } from "@/lib/store/orders";
 import { EditorLoader } from "@/components/editor/editor-loader";
 
-export const metadata = {
-  title: "Design Tool · Click Print",
-  description: "Canva-grade in-browser design tool for flyer printing. Templates, fonts, shapes, and vector PDF export.",
-};
+import { pageMetadata } from "@/lib/config/site";
+
+export const metadata = pageMetadata({
+  title: "Free Online Flyer Designer — Canva-grade Editor",
+  description: "Design A4 and A5 flyers free in your browser. 27 Google Fonts, 6 templates, shapes, image upload, AI generation. Exports to print-grade vector PDF. No login required.",
+  path: "/design",
+  keywords: ["free flyer designer", "online flyer maker", "Canva alternative", "design flyer browser"],
+});
 
 export const dynamic = "force-dynamic";
 

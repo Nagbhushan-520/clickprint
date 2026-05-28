@@ -1,4 +1,11 @@
 import { brand } from "@/lib/config/brand";
+import { pageMetadata } from "@/lib/config/site";
+
+export const metadata = pageMetadata({
+  title: "About — Print Studio in Akkipet, Bangalore",
+  description: `${brand.name} is a neighborhood flyer printing studio in ${brand.address.line2}, ${brand.address.city}. Premium maplitho and art paper, 24-hour turnaround, fair prices.`,
+  path: "/about",
+});
 
 export default function AboutPage() {
   return (

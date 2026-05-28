@@ -1,13 +1,36 @@
 import { SizeDetail } from "@/components/marketing/size-detail";
+import { JsonLd } from "@/components/seo/json-ld";
+import { productSchema, breadcrumbSchema } from "@/lib/seo/structured-data";
+import { pageMetadata } from "@/lib/config/site";
 
-export const metadata = {
-  title: "A4 Flyer Printing in Bangalore · Click Print",
-  description: "A4 flyer printing on premium maplitho and art paper. Single or full color, single or double sided. Live pricing.",
-};
+export const metadata = pageMetadata({
+  title: "A4 Flyer Printing in Bangalore",
+  description: "A4 flyer printing (210 × 297 mm) on premium maplitho and 130 GSM art paper. Single or full color, single or double sided. Live online pricing. Same-day pickup or Bangalore delivery.",
+  path: "/flyers/a4",
+  keywords: ["A4 flyer printing Bangalore", "A4 flyer price", "A4 leaflet printing", "210 297 mm flyer"],
+});
 
 export default function A4Page() {
   return (
-    <SizeDetail
+    <>
+      <JsonLd
+        data={[
+          productSchema({
+            name: "A4 Flyer Printing",
+            description: "A4 size (210 × 297 mm) flyer printing in single or full color on premium maplitho or art paper.",
+            size: "A4",
+            url: "/flyers/a4",
+            minPrice: 84,
+            maxPrice: 32000,
+          }),
+          breadcrumbSchema([
+            { name: "Home", url: "/" },
+            { name: "Flyers", url: "/flyers" },
+            { name: "A4 Flyers", url: "/flyers/a4" },
+          ]),
+        ]}
+      />
+      <SizeDetail
       size="A4"
       dimensions="210 × 297 mm"
       inches="8.27 × 11.69 in"
@@ -40,5 +63,6 @@ export default function A4Page() {
       popularQuantity={1000}
       popularQuantityPrice={3250}
     />
+    </>
   );
 }

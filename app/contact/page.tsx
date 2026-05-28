@@ -1,5 +1,13 @@
 import { brand } from "@/lib/config/brand";
 import { Phone, Mail, MapPin, MessageCircle } from "lucide-react";
+import { pageMetadata } from "@/lib/config/site";
+
+export const metadata = pageMetadata({
+  title: "Contact Click Print — Akkipet Bangalore Flyer Studio",
+  description: `Visit ${brand.name} at ${brand.address.line2}, ${brand.address.city}. Call ${brand.phone}, WhatsApp ${brand.whatsapp}, email ${brand.email}. Mon-Sat 9:30am-8pm.`,
+  path: "/contact",
+  keywords: ["Click Print contact", "Akkipet print shop address", "flyer printing near me"],
+});
 
 export default function ContactPage() {
   return (

@@ -1,11 +1,16 @@
 import Link from "next/link";
 import { ArrowRight, Ruler, Printer, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { JsonLd } from "@/components/seo/json-ld";
+import { breadcrumbSchema } from "@/lib/seo/structured-data";
+import { pageMetadata } from "@/lib/config/site";
 
-export const metadata = {
-  title: "Flyer Printing · A4 & A5 · Click Print",
-  description: "Premium flyer printing in Bangalore. A4 and A5 in single or full color on real maplitho and art paper.",
-};
+export const metadata = pageMetadata({
+  title: "Flyer Printing in Bangalore · A4 & A5",
+  description: "Premium A4 and A5 flyer printing in Bangalore. Single or full color, single or double sided, on real maplitho and art paper from 70 to 130 GSM. Live online pricing.",
+  path: "/flyers",
+  keywords: ["A4 flyer printing", "A5 flyer printing", "flyer sizes", "A4 vs A5 flyers"],
+});
 
 const SIZES = [
   {
@@ -39,6 +44,12 @@ const FEATURES = [
 export default function FlyersPage() {
   return (
     <div className="pt-24 pb-32 md:pt-32">
+      <JsonLd
+        data={breadcrumbSchema([
+          { name: "Home", url: "/" },
+          { name: "Flyers", url: "/flyers" },
+        ])}
+      />
       <div className="container-wide">
         <div className="max-w-2xl">
           <div className="chip">Flyer printing</div>

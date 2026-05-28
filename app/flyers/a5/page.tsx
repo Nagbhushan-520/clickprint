@@ -1,13 +1,36 @@
 import { SizeDetail } from "@/components/marketing/size-detail";
+import { JsonLd } from "@/components/seo/json-ld";
+import { productSchema, breadcrumbSchema } from "@/lib/seo/structured-data";
+import { pageMetadata } from "@/lib/config/site";
 
-export const metadata = {
-  title: "A5 Flyer Printing in Bangalore · Click Print",
-  description: "A5 flyer printing on premium maplitho and art paper. Pocket-friendly, half the cost of A4. Live pricing.",
-};
+export const metadata = pageMetadata({
+  title: "A5 Flyer Printing in Bangalore",
+  description: "A5 flyer printing (148 × 210 mm) — pocket-friendly, half the cost of A4. Single or full color on maplitho or 130 GSM art paper. Perfect for doorstep drops, gym mailers, restaurant promos.",
+  path: "/flyers/a5",
+  keywords: ["A5 flyer printing Bangalore", "A5 flyer price", "doorstep drop flyer", "148 210 mm flyer"],
+});
 
 export default function A5Page() {
   return (
-    <SizeDetail
+    <>
+      <JsonLd
+        data={[
+          productSchema({
+            name: "A5 Flyer Printing",
+            description: "A5 size (148 × 210 mm) flyer printing in single or full color on premium maplitho or art paper.",
+            size: "A5",
+            url: "/flyers/a5",
+            minPrice: 48,
+            maxPrice: 18000,
+          }),
+          breadcrumbSchema([
+            { name: "Home", url: "/" },
+            { name: "Flyers", url: "/flyers" },
+            { name: "A5 Flyers", url: "/flyers/a5" },
+          ]),
+        ]}
+      />
+      <SizeDetail
       size="A5"
       dimensions="148 × 210 mm"
       inches="5.83 × 8.27 in"
@@ -40,5 +63,6 @@ export default function A5Page() {
       popularQuantity={1000}
       popularQuantityPrice={1900}
     />
+    </>
   );
 }
