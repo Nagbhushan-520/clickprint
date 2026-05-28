@@ -1,27 +1,52 @@
 "use client";
 
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
-import { Canvas as FabricCanvas, FabricObject, FabricImage, Rect, Circle, IText, Textbox, Line } from "fabric";
+import {
+  Canvas as FabricCanvas,
+  FabricObject,
+  FabricImage,
+  Rect,
+  Circle,
+  Textbox,
+  Line,
+  Triangle,
+  Polygon,
+  Path,
+  Gradient,
+  ActiveSelection,
+  filters as fabricFilters,
+} from "fabric";
 import { DIMENSIONS, type EditorSize, computeFitZoom } from "@/lib/editor/dimensions";
 import { loadFont, preloadAllFonts } from "@/lib/editor/fonts";
 import type { Template, TemplateObject } from "@/lib/editor/templates";
 
+export type ShapeKind = "rect" | "rounded" | "circle" | "line" | "triangle" | "star" | "arrow" | "speech";
+export type ImageFilterKind = "none" | "grayscale" | "sepia" | "invert" | "vintage";
+export type AlignKind = "left" | "center" | "right" | "top" | "middle" | "bottom" | "distribute-h" | "distribute-v";
+export type BackgroundKind = { type: "color"; color: string } | { type: "gradient"; from: string; to: string; angle: number };
+
 export type CanvasHandle = {
   getFabric: () => FabricCanvas | null;
   addText: (text: string, options?: Partial<Record<string, unknown>>) => void;
-  addRect: () => void;
-  addCircle: () => void;
-  addLine: () => void;
+  addShape: (kind: ShapeKind) => void;
   addImage: (file: File) => Promise<void>;
-  setBackground: (color: string) => void;
+  addImageFromUrl: (url: string) => Promise<void>;
+  setBackground: (bg: BackgroundKind) => void;
   loadTemplate: (tpl: Template) => void;
   exportPNG: () => string;
+  exportSVG: () => string;
+  exportPDF: () => Promise<Uint8Array>;
   exportJSON: () => object;
   loadJSON: (json: object) => Promise<void>;
   deleteSelected: () => void;
   duplicateSelected: () => void;
   bringForward: () => void;
   sendBackward: () => void;
+  applyFilter: (filter: ImageFilterKind, intensity?: number) => void;
+  setFilterValue: (key: "brightness" | "contrast" | "saturation", value: number) => void;
+  align: (kind: AlignKind) => void;
+  nudge: (dx: number, dy: number) => void;
+  reorderLayer: (fromIndex: number, toIndex: number) => void;
   setZoom: (zoom: number) => void;
   fitToView: () => void;
   zoomIn: () => void;
@@ -29,34 +54,40 @@ export type CanvasHandle = {
   resize: (size: EditorSize) => void;
   undo: () => Promise<void>;
   redo: () => Promise<void>;
+  toggleVisibility: (obj: FabricObject) => void;
+  toggleLock: (obj: FabricObject) => void;
 };
 
 type Props = {
   size: EditorSize;
   initialTemplate?: Template | null;
+  initialJSON?: object | null;
   onSelectionChange?: (obj: FabricObject | null) => void;
   onObjectsChange?: (objects: FabricObject[]) => void;
   onZoomChange?: (zoom: number) => void;
   onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
+  onAutoSave?: (json: object) => void;
 };
 
-const HISTORY_LIMIT = 40;
+const HISTORY_LIMIT = 50;
+const SNAP_THRESHOLD = 20; // px in canvas units
 
 export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
-  { size, initialTemplate, onSelectionChange, onObjectsChange, onZoomChange, onHistoryChange },
+  { size, initialTemplate, initialJSON, onSelectionChange, onObjectsChange, onZoomChange, onHistoryChange, onAutoSave },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const elRef = useRef<HTMLCanvasElement>(null);
+  const guidesRef = useRef<HTMLCanvasElement>(null);
   const fcRef = useRef<FabricCanvas | null>(null);
   const historyRef = useRef<{ stack: string[]; index: number; suppress: boolean }>({
     stack: [],
     index: -1,
     suppress: false,
   });
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [zoom, setZoomState] = useState(1);
 
-  // Initialize Fabric once
   useEffect(() => {
     if (!elRef.current || fcRef.current) return;
     const dim = DIMENSIONS[size];
@@ -72,7 +103,6 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
       selectionLineWidth: 2,
     });
 
-    // Set object default styling for selection handles
     FabricObject.ownDefaults.borderColor = "#FF4D2E";
     FabricObject.ownDefaults.cornerColor = "#FF4D2E";
     FabricObject.ownDefaults.cornerStyle = "circle";
@@ -85,19 +115,25 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
 
     // Selection events
     const updateSelection = () => {
-      const active = fc.getActiveObject();
-      onSelectionChange?.(active ?? null);
+      onSelectionChange?.(fc.getActiveObject() ?? null);
     };
     fc.on("selection:created", updateSelection);
     fc.on("selection:updated", updateSelection);
     fc.on("selection:cleared", updateSelection);
 
-    // History tracking
+    // Snap guides during drag
+    fc.on("object:moving", (e) => {
+      const obj = e.target;
+      if (!obj) return;
+      drawSnapGuides(fc, obj);
+    });
+    fc.on("mouse:up", () => clearGuides());
+
+    // History
     const pushHistory = () => {
       if (historyRef.current.suppress) return;
       const json = JSON.stringify(fc.toJSON());
       const h = historyRef.current;
-      // Truncate forward if we're not at the head
       if (h.index < h.stack.length - 1) {
         h.stack = h.stack.slice(0, h.index + 1);
       }
@@ -106,29 +142,41 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
       h.index = h.stack.length - 1;
       onHistoryChange?.(h.index > 0, false);
       onObjectsChange?.(fc.getObjects());
+
+      // Auto-save (debounced)
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = setTimeout(() => {
+        onAutoSave?.(JSON.parse(json));
+      }, 600);
     };
     fc.on("object:added", pushHistory);
     fc.on("object:modified", pushHistory);
     fc.on("object:removed", pushHistory);
 
-    // Load initial template
-    if (initialTemplate) {
+    // Load initial
+    if (initialJSON) {
+      historyRef.current.suppress = true;
+      fc.loadFromJSON(initialJSON).then(() => {
+        fc.renderAll();
+        historyRef.current.suppress = false;
+        pushHistory();
+      });
+    } else if (initialTemplate) {
       loadTemplateImpl(fc, initialTemplate);
     } else {
       pushHistory();
     }
 
-    // Fit zoom
     setTimeout(() => fitToViewImpl(fc, containerRef.current), 50);
 
     return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
       fc.dispose();
       fcRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Resize when size prop changes
   useEffect(() => {
     if (!fcRef.current) return;
     const dim = DIMENSIONS[size];
@@ -136,14 +184,12 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
     fitToViewImpl(fcRef.current, containerRef.current);
   }, [size]);
 
-  // Handle window resize for zoom-to-fit
   useEffect(() => {
     const onResize = () => fitToViewImpl(fcRef.current, containerRef.current);
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // ---- helpers ----
   const fitToViewImpl = (fc: FabricCanvas | null, container: HTMLDivElement | null) => {
     if (!fc || !container) return;
     const rect = container.getBoundingClientRect();
@@ -155,17 +201,95 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
     fc.setZoom(z);
     const newW = fc.getWidth() * z;
     const newH = fc.getHeight() * z;
-    // Update DOM size of canvas to fit
-    const elements = fc.getElement().parentElement;
-    if (elements) {
-      elements.style.width = `${newW}px`;
-      elements.style.height = `${newH}px`;
-    }
     fc.setDimensions({ width: newW, height: newH }, { cssOnly: true });
+    if (guidesRef.current) {
+      guidesRef.current.width = newW;
+      guidesRef.current.height = newH;
+    }
     setZoomState(z);
     onZoomChange?.(z);
   };
 
+  // --- Snap guides ---
+  const drawSnapGuides = (fc: FabricCanvas, obj: FabricObject) => {
+    if (!guidesRef.current) return;
+    const ctx = guidesRef.current.getContext("2d");
+    if (!ctx) return;
+    const z = fc.getZoom();
+    ctx.clearRect(0, 0, guidesRef.current.width, guidesRef.current.height);
+    ctx.strokeStyle = "#FF4D2E";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 6]);
+
+    const bounds = obj.getBoundingRect();
+    const cw = fc.getWidth() / z;
+    const ch = fc.getHeight() / z;
+    const objLeft = bounds.left;
+    const objRight = bounds.left + bounds.width;
+    const objCenterX = bounds.left + bounds.width / 2;
+    const objTop = bounds.top;
+    const objBottom = bounds.top + bounds.height;
+    const objCenterY = bounds.top + bounds.height / 2;
+
+    // Canvas center vertical
+    if (Math.abs(objCenterX - cw / 2) < SNAP_THRESHOLD) {
+      obj.set({ left: (obj.left ?? 0) + (cw / 2 - objCenterX) });
+      drawLineCanvas(ctx, cw / 2 * z, 0, cw / 2 * z, ch * z);
+    }
+    // Canvas center horizontal
+    if (Math.abs(objCenterY - ch / 2) < SNAP_THRESHOLD) {
+      obj.set({ top: (obj.top ?? 0) + (ch / 2 - objCenterY) });
+      drawLineCanvas(ctx, 0, ch / 2 * z, cw * z, ch / 2 * z);
+    }
+    // Edges
+    if (Math.abs(objLeft) < SNAP_THRESHOLD) {
+      obj.set({ left: (obj.left ?? 0) - objLeft });
+      drawLineCanvas(ctx, 0, 0, 0, ch * z);
+    }
+    if (Math.abs(objRight - cw) < SNAP_THRESHOLD) {
+      obj.set({ left: (obj.left ?? 0) + (cw - objRight) });
+      drawLineCanvas(ctx, cw * z, 0, cw * z, ch * z);
+    }
+    if (Math.abs(objTop) < SNAP_THRESHOLD) {
+      obj.set({ top: (obj.top ?? 0) - objTop });
+      drawLineCanvas(ctx, 0, 0, cw * z, 0);
+    }
+    if (Math.abs(objBottom - ch) < SNAP_THRESHOLD) {
+      obj.set({ top: (obj.top ?? 0) + (ch - objBottom) });
+      drawLineCanvas(ctx, 0, ch * z, cw * z, ch * z);
+    }
+
+    // Snap to other objects
+    const others = fc.getObjects().filter((o) => o !== obj);
+    for (const other of others) {
+      const ob = other.getBoundingRect();
+      const oCenterX = ob.left + ob.width / 2;
+      const oCenterY = ob.top + ob.height / 2;
+      if (Math.abs(objCenterX - oCenterX) < SNAP_THRESHOLD) {
+        obj.set({ left: (obj.left ?? 0) + (oCenterX - objCenterX) });
+        drawLineCanvas(ctx, oCenterX * z, 0, oCenterX * z, ch * z);
+      }
+      if (Math.abs(objCenterY - oCenterY) < SNAP_THRESHOLD) {
+        obj.set({ top: (obj.top ?? 0) + (oCenterY - objCenterY) });
+        drawLineCanvas(ctx, 0, oCenterY * z, cw * z, oCenterY * z);
+      }
+    }
+  };
+
+  const drawLineCanvas = (ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number) => {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  };
+
+  const clearGuides = () => {
+    if (!guidesRef.current) return;
+    const ctx = guidesRef.current.getContext("2d");
+    ctx?.clearRect(0, 0, guidesRef.current.width, guidesRef.current.height);
+  };
+
+  // --- Template load ---
   const loadTemplateImpl = (fc: FabricCanvas, tpl: Template) => {
     historyRef.current.suppress = true;
     fc.clear();
@@ -176,12 +300,43 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
     }
     fc.renderAll();
     historyRef.current.suppress = false;
-    // Push the loaded state to history
     const json = JSON.stringify(fc.toJSON());
     historyRef.current.stack = [json];
     historyRef.current.index = 0;
     onHistoryChange?.(false, false);
     onObjectsChange?.(fc.getObjects());
+  };
+
+  // --- Shape factory ---
+  const makeShape = (kind: ShapeKind): FabricObject | null => {
+    const common = { left: 200, top: 200 };
+    switch (kind) {
+      case "rect":
+        return new Rect({ ...common, width: 600, height: 400, fill: "#FF4D2E" });
+      case "rounded":
+        return new Rect({ ...common, width: 600, height: 400, fill: "#0A0A06", rx: 60, ry: 60 });
+      case "circle":
+        return new Circle({ ...common, radius: 250, fill: "#FFAA00" });
+      case "line":
+        return new Line([100, 200, 900, 200], { stroke: "#0A0A06", strokeWidth: 12 });
+      case "triangle":
+        return new Triangle({ ...common, width: 500, height: 500, fill: "#FF4D2E" });
+      case "star": {
+        const points = makeStarPoints(5, 250, 100, 200, 200);
+        return new Polygon(points, { ...common, fill: "#FFAA00" });
+      }
+      case "arrow": {
+        // Arrow shape as path
+        const p = "M 0 50 L 200 50 L 200 0 L 300 100 L 200 200 L 200 150 L 0 150 Z";
+        return new Path(p, { ...common, fill: "#0A0A06" });
+      }
+      case "speech": {
+        const p = "M 30 30 L 470 30 Q 500 30 500 60 L 500 280 Q 500 310 470 310 L 200 310 L 150 380 L 150 310 L 50 310 Q 20 310 20 280 L 20 60 Q 20 30 50 30 Z";
+        return new Path(p, { ...common, fill: "#FF4D2E" });
+      }
+      default:
+        return null;
+    }
   };
 
   useImperativeHandle(ref, () => ({
@@ -198,58 +353,27 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
         fontSize: 120,
         fill: "#0A0A06",
         fontFamily: family,
+        editable: true,
         ...options,
       });
       fc.add(t);
       fc.setActiveObject(t);
       fc.requestRenderAll();
     },
-    addRect: () => {
+    addShape: (kind) => {
       const fc = fcRef.current;
       if (!fc) return;
-      const r = new Rect({
-        left: 200,
-        top: 200,
-        width: 600,
-        height: 400,
-        fill: "#FF4D2E",
-        rx: 16,
-        ry: 16,
-      });
-      fc.add(r);
-      fc.setActiveObject(r);
+      const obj = makeShape(kind);
+      if (!obj) return;
+      fc.add(obj);
+      fc.setActiveObject(obj);
       fc.requestRenderAll();
     },
-    addCircle: () => {
-      const fc = fcRef.current;
-      if (!fc) return;
-      const c = new Circle({
-        left: 200,
-        top: 200,
-        radius: 250,
-        fill: "#FFAA00",
-      });
-      fc.add(c);
-      fc.setActiveObject(c);
-      fc.requestRenderAll();
-    },
-    addLine: () => {
-      const fc = fcRef.current;
-      if (!fc) return;
-      const l = new Line([100, 200, 900, 200], {
-        stroke: "#0A0A06",
-        strokeWidth: 12,
-      });
-      fc.add(l);
-      fc.setActiveObject(l);
-      fc.requestRenderAll();
-    },
-    addImage: async (file: File) => {
+    addImage: async (file) => {
       const fc = fcRef.current;
       if (!fc) return;
       const url = URL.createObjectURL(file);
       const img = await FabricImage.fromURL(url, { crossOrigin: "anonymous" });
-      // Scale to fit canvas reasonably
       const maxDim = Math.min(fc.getWidth(), fc.getHeight()) * 0.6;
       const scale = Math.min(maxDim / img.width!, maxDim / img.height!, 1);
       img.scale(scale);
@@ -258,10 +382,54 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
       fc.setActiveObject(img);
       fc.requestRenderAll();
     },
-    setBackground: (color) => {
+    addImageFromUrl: async (url) => {
       const fc = fcRef.current;
       if (!fc) return;
-      fc.backgroundColor = color;
+      const img = await FabricImage.fromURL(url, { crossOrigin: "anonymous" });
+      const maxDim = Math.min(fc.getWidth(), fc.getHeight()) * 0.6;
+      const scale = Math.min(maxDim / img.width!, maxDim / img.height!, 1);
+      img.scale(scale);
+      img.set({ left: 200, top: 200 });
+      fc.add(img);
+      fc.setActiveObject(img);
+      fc.requestRenderAll();
+    },
+    setBackground: (bg) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      if (bg.type === "color") {
+        fc.backgroundColor = bg.color;
+      } else {
+        const gradient = new Gradient({
+          type: "linear",
+          gradientUnits: "percentage",
+          coords: {
+            x1: 0, y1: 0,
+            x2: Math.cos((bg.angle - 90) * Math.PI / 180),
+            y2: Math.sin((bg.angle - 90) * Math.PI / 180),
+          },
+          colorStops: [
+            { offset: 0, color: bg.from },
+            { offset: 1, color: bg.to },
+          ],
+        });
+        // Apply to background as a Rect
+        const dim = DIMENSIONS[size];
+        const bgRect = new Rect({
+          left: 0, top: 0, width: dim.px.w, height: dim.px.h,
+          fill: gradient,
+          selectable: false, evented: false,
+          excludeFromExport: false,
+        });
+        // Remove old background rect
+        fc.getObjects().forEach((o) => {
+          if ((o as any).__isBackground) fc.remove(o);
+        });
+        (bgRect as any).__isBackground = true;
+        fc.add(bgRect);
+        fc.sendObjectToBack(bgRect);
+        fc.backgroundColor = bg.from;
+      }
       fc.requestRenderAll();
       const h = historyRef.current;
       const json = JSON.stringify(fc.toJSON());
@@ -276,11 +444,31 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
     exportPNG: () => {
       const fc = fcRef.current;
       if (!fc) return "";
-      return fc.toDataURL({
-        format: "png",
-        quality: 1,
-        multiplier: 1,
+      return fc.toDataURL({ format: "png", quality: 1, multiplier: 1 });
+    },
+    exportSVG: () => {
+      const fc = fcRef.current;
+      if (!fc) return "";
+      return fc.toSVG();
+    },
+    exportPDF: async () => {
+      const fc = fcRef.current;
+      if (!fc) throw new Error("No canvas");
+      const { PDFDocument, rgb } = await import("pdf-lib");
+      const png = fc.toDataURL({ format: "png", quality: 1, multiplier: 1 });
+      const dim = DIMENSIONS[size];
+      const ptsPerMm = 2.83465; // 1mm = 2.83465 pt
+      const pdf = await PDFDocument.create();
+      const page = pdf.addPage([dim.mm.w * ptsPerMm, dim.mm.h * ptsPerMm]);
+      const pngBytes = Uint8Array.from(atob(png.split(",")[1]), (c) => c.charCodeAt(0));
+      const img = await pdf.embedPng(pngBytes);
+      page.drawImage(img, {
+        x: 0,
+        y: 0,
+        width: dim.mm.w * ptsPerMm,
+        height: dim.mm.h * ptsPerMm,
       });
+      return await pdf.save();
     },
     exportJSON: () => {
       const fc = fcRef.current;
@@ -298,8 +486,7 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
     deleteSelected: () => {
       const fc = fcRef.current;
       if (!fc) return;
-      const active = fc.getActiveObjects();
-      active.forEach((o) => fc.remove(o));
+      fc.getActiveObjects().forEach((o) => fc.remove(o));
       fc.discardActiveObject();
       fc.requestRenderAll();
     },
@@ -331,16 +518,96 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
       fc.sendObjectBackwards(active);
       fc.requestRenderAll();
     },
-    setZoom: (z: number) => {
+    applyFilter: (filter, intensity = 1) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const active = fc.getActiveObject();
+      if (!active || (active as any).type !== "image") return;
+      const img = active as FabricImage;
+      img.filters = img.filters || [];
+      // Replace existing color filters
+      img.filters = img.filters.filter((f: any) => !["Grayscale", "Sepia", "Invert", "Vintage"].includes(f.type));
+      if (filter === "grayscale") img.filters.push(new fabricFilters.Grayscale());
+      else if (filter === "sepia") img.filters.push(new fabricFilters.Sepia());
+      else if (filter === "invert") img.filters.push(new fabricFilters.Invert());
+      else if (filter === "vintage") img.filters.push(new fabricFilters.Vintage());
+      img.applyFilters();
+      fc.requestRenderAll();
+    },
+    setFilterValue: (key, value) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const active = fc.getActiveObject();
+      if (!active || (active as any).type !== "image") return;
+      const img = active as FabricImage;
+      img.filters = img.filters || [];
+      const className = key === "brightness" ? "Brightness" : key === "contrast" ? "Contrast" : "Saturation";
+      img.filters = img.filters.filter((f: any) => f.type !== className);
+      if (value !== 0) {
+        const FilterCls = (fabricFilters as any)[className];
+        const filterInstance = new FilterCls({ [key]: value });
+        img.filters.push(filterInstance);
+      }
+      img.applyFilters();
+      fc.requestRenderAll();
+    },
+    align: (kind) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const active = fc.getActiveObject();
+      if (!active) return;
+      const cw = fc.getWidth() / fc.getZoom();
+      const ch = fc.getHeight() / fc.getZoom();
+
+      if (active instanceof ActiveSelection) {
+        const objs = active.getObjects();
+        // Multi-object align: align relative to selection bbox
+        const bbox = active.getBoundingRect();
+        objs.forEach((obj) => {
+          const ob = obj.getBoundingRect();
+          if (kind === "left") obj.set({ left: (obj.left ?? 0) - (ob.left - bbox.left) });
+          if (kind === "right") obj.set({ left: (obj.left ?? 0) + (bbox.left + bbox.width - (ob.left + ob.width)) });
+          if (kind === "center") obj.set({ left: (obj.left ?? 0) + (bbox.left + bbox.width / 2 - (ob.left + ob.width / 2)) });
+          if (kind === "top") obj.set({ top: (obj.top ?? 0) - (ob.top - bbox.top) });
+          if (kind === "bottom") obj.set({ top: (obj.top ?? 0) + (bbox.top + bbox.height - (ob.top + ob.height)) });
+          if (kind === "middle") obj.set({ top: (obj.top ?? 0) + (bbox.top + bbox.height / 2 - (ob.top + ob.height / 2)) });
+        });
+      } else {
+        const ob = active.getBoundingRect();
+        if (kind === "left") active.set({ left: (active.left ?? 0) - ob.left });
+        if (kind === "right") active.set({ left: (active.left ?? 0) + (cw - (ob.left + ob.width)) });
+        if (kind === "center") active.set({ left: (active.left ?? 0) + (cw / 2 - (ob.left + ob.width / 2)) });
+        if (kind === "top") active.set({ top: (active.top ?? 0) - ob.top });
+        if (kind === "bottom") active.set({ top: (active.top ?? 0) + (ch - (ob.top + ob.height)) });
+        if (kind === "middle") active.set({ top: (active.top ?? 0) + (ch / 2 - (ob.top + ob.height / 2)) });
+      }
+      fc.requestRenderAll();
+      fc.fire("object:modified", { target: active });
+    },
+    nudge: (dx, dy) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const active = fc.getActiveObject();
+      if (!active) return;
+      active.set({ left: (active.left ?? 0) + dx, top: (active.top ?? 0) + dy });
+      active.setCoords();
+      fc.requestRenderAll();
+      fc.fire("object:modified", { target: active });
+    },
+    reorderLayer: (fromIndex, toIndex) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const objs = fc.getObjects();
+      if (fromIndex < 0 || fromIndex >= objs.length || toIndex < 0 || toIndex >= objs.length) return;
+      const obj = objs[fromIndex];
+      // Move in stack
+      fc.moveObjectTo(obj, toIndex);
+      fc.requestRenderAll();
+    },
+    setZoom: (z) => {
       const fc = fcRef.current;
       if (!fc) return;
       fc.setZoom(z);
-      const newW = fc.getWidth() / fc.getZoom() * z;
-      const newH = fc.getHeight() / fc.getZoom() * z;
-      const elements = fc.getElement().parentElement;
-      if (elements) {
-        elements.style.width = `${fc.getWidth() * z / (fcRef.current?.getZoom() || 1)}px`;
-      }
       setZoomState(z);
       onZoomChange?.(z);
     },
@@ -348,7 +615,7 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
     zoomIn: () => {
       const fc = fcRef.current;
       if (!fc) return;
-      const next = Math.min(zoom * 1.25, 4);
+      const next = Math.min(fc.getZoom() * 1.25, 4);
       fc.setZoom(next);
       fc.setDimensions({
         width: fc.getWidth() / fc.getZoom() * next,
@@ -360,7 +627,7 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
     zoomOut: () => {
       const fc = fcRef.current;
       if (!fc) return;
-      const next = Math.max(zoom * 0.8, 0.05);
+      const next = Math.max(fc.getZoom() * 0.8, 0.05);
       fc.setZoom(next);
       setZoomState(next);
       onZoomChange?.(next);
@@ -397,18 +664,62 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
       onObjectsChange?.(fc.getObjects());
       onHistoryChange?.(h.index > 0, h.index < h.stack.length - 1);
     },
+    toggleVisibility: (obj) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      obj.visible = !obj.visible;
+      fc.requestRenderAll();
+      onObjectsChange?.(fc.getObjects());
+    },
+    toggleLock: (obj) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const wasLocked = obj.lockMovementX || false;
+      obj.set({
+        lockMovementX: !wasLocked,
+        lockMovementY: !wasLocked,
+        lockScalingX: !wasLocked,
+        lockScalingY: !wasLocked,
+        lockRotation: !wasLocked,
+        evented: wasLocked,
+        selectable: wasLocked,
+      });
+      fc.requestRenderAll();
+      onObjectsChange?.(fc.getObjects());
+    },
   }));
 
   return (
-    <div ref={containerRef} className="relative grid h-full w-full place-items-center overflow-auto bg-cream p-8 [background-image:radial-gradient(circle,rgba(10,10,6,0.06)_1px,transparent_1px)] [background-size:24px_24px]">
+    <div
+      ref={containerRef}
+      className="relative grid h-full w-full place-items-center overflow-auto bg-cream p-8 [background-image:radial-gradient(circle,rgba(10,10,6,0.06)_1px,transparent_1px)] [background-size:24px_24px]"
+    >
       <div className="relative shadow-[0_30px_60px_-20px_rgba(10,10,6,0.3)]">
         <canvas ref={elRef} />
+        {/* Snap guides overlay */}
+        <canvas
+          ref={guidesRef}
+          className="pointer-events-none absolute inset-0"
+        />
       </div>
     </div>
   );
 });
 
-// Convert template object → Fabric instance
+// Helpers
+function makeStarPoints(spikes: number, outerRadius: number, innerRadius: number, cx: number, cy: number) {
+  const points: { x: number; y: number }[] = [];
+  let rot = (Math.PI / 2) * 3;
+  const step = Math.PI / spikes;
+  for (let i = 0; i < spikes; i++) {
+    points.push({ x: cx + Math.cos(rot) * outerRadius, y: cy + Math.sin(rot) * outerRadius });
+    rot += step;
+    points.push({ x: cx + Math.cos(rot) * innerRadius, y: cy + Math.sin(rot) * innerRadius });
+    rot += step;
+  }
+  return points;
+}
+
 function templateObjectToFabric(obj: TemplateObject): FabricObject | null {
   if (obj.type === "rect") {
     return new Rect({
@@ -438,6 +749,7 @@ function templateObjectToFabric(obj: TemplateObject): FabricObject | null {
       charSpacing: obj.charSpacing ?? 0,
       angle: obj.angle ?? 0,
       width: 1500,
+      editable: true,
     });
   }
   return null;

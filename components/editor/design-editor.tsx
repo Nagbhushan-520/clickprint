@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FabricObject } from "fabric";
-import { CanvasBoard, type CanvasHandle } from "./canvas-board";
+import { CanvasBoard, type CanvasHandle, type AlignKind, type ImageFilterKind, type ShapeKind } from "./canvas-board";
 import { TopToolbar } from "./top-toolbar";
 import { LeftToolbar, type Panel } from "./left-toolbar";
 import { PanelTemplates } from "./panel-templates";
@@ -13,17 +13,18 @@ import { PanelBackground } from "./panel-background";
 import { PanelLayers } from "./panel-layers";
 import { PanelAi } from "./panel-ai";
 import { PropertiesPanel } from "./properties-panel";
-import { ZoomIn, ZoomOut, Maximize, ChevronLeft } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize, Save, CheckCircle2 } from "lucide-react";
 import type { EditorSize } from "@/lib/editor/dimensions";
 import type { Template } from "@/lib/editor/templates";
 import { TEMPLATES } from "@/lib/editor/templates";
-import { cn } from "@/lib/utils";
 
 type Props = {
   orderId?: string;
   initialSize?: EditorSize;
   aiMode?: boolean;
 };
+
+const AUTOSAVE_KEY = "clickprint_editor_autosave";
 
 export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Props) {
   const router = useRouter();
@@ -35,10 +36,29 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Pr
   const [zoom, setZoom] = useState(1);
   const [history, setHistory] = useState({ canUndo: false, canRedo: false });
   const [isExporting, setIsExporting] = useState(false);
-  const [initialTemplate] = useState<Template | null>(() => {
-    // Pick a default starter template for the chosen size if any
-    return TEMPLATES.find((t) => t.size === initialSize) ?? null;
-  });
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  const [initialTemplate, setInitialTemplate] = useState<Template | null>(null);
+  const [initialJSON, setInitialJSON] = useState<object | null>(null);
+
+  // On mount, decide whether to load autosave or template
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.localStorage.getItem(AUTOSAVE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.json) {
+          setInitialJSON(parsed.json);
+          if (parsed.size) setSize(parsed.size);
+          return;
+        }
+      } catch {}
+    }
+    // No autosave - start with a default template for the size
+    setInitialTemplate(TEMPLATES.find((t) => t.size === initialSize) ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -51,43 +71,56 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Pr
         e.preventDefault();
         canvasRef.current?.undo();
       }
-      if ((meta && e.key === "z" && e.shiftKey) || (meta && e.key === "y")) {
-        if (!inField) {
-          e.preventDefault();
-          canvasRef.current?.redo();
-        }
+      if (((meta && e.key === "z" && e.shiftKey) || (meta && e.key === "y")) && !inField) {
+        e.preventDefault();
+        canvasRef.current?.redo();
       }
       if (meta && e.key === "d" && !inField) {
         e.preventDefault();
         canvasRef.current?.duplicateSelected();
       }
-      if ((e.key === "Delete" || e.key === "Backspace") && !inField) {
-        if (selected) {
-          canvasRef.current?.deleteSelected();
-          e.preventDefault();
-        }
+      if ((e.key === "Delete" || e.key === "Backspace") && !inField && selected) {
+        canvasRef.current?.deleteSelected();
+        e.preventDefault();
+      }
+      // Arrow keys nudge
+      if (!inField && selected && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+        const step = e.shiftKey ? 50 : 5;
+        const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+        const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+        canvasRef.current?.nudge(dx, dy);
+        e.preventDefault();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [selected]);
 
+  // Auto-save handler
+  const onAutoSave = (json: object) => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ json, size, ts: Date.now() }));
+    setSavedAt(Date.now());
+  };
+
   const onExport = async () => {
     if (!canvasRef.current) return;
     setIsExporting(true);
     try {
-      // Export PNG and JSON
       const png = canvasRef.current.exportPNG();
       const json = canvasRef.current.exportJSON();
 
       if (orderId) {
-        // POST to server to save against order
         const res = await fetch(`/api/orders/${orderId}/design`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ png, json, size }),
         });
         if (res.ok) {
+          // Clear autosave since we've persisted
+          if (typeof window !== "undefined") {
+            window.localStorage.removeItem(AUTOSAVE_KEY);
+          }
           router.push(`/checkout?orderId=${orderId}`);
           return;
         } else {
@@ -97,15 +130,34 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Pr
         }
       }
 
-      // No order yet — download the PNG
+      // No order — download PDF
+      const pdfBytes = await canvasRef.current.exportPDF();
+      const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.download = `flyer-${Date.now()}.png`;
-      link.href = png;
+      link.href = url;
+      link.download = `clickprint-${size.toLowerCase()}-${Date.now()}.pdf`;
       link.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      alert("Export failed. Try again.");
     } finally {
       setIsExporting(false);
     }
   };
+
+  // Don't render the canvas until we've decided what to initialize with
+  if (initialTemplate === null && initialJSON === null) {
+    return (
+      <div className="fixed inset-0 z-[100] grid place-items-center bg-cream">
+        <div className="text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-flame-500/20 border-t-flame-500" />
+          <div className="mt-4 font-display text-sm font-semibold text-ink-700">Loading editor...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-paper">
@@ -122,6 +174,8 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Pr
         onExport={onExport}
         isExporting={isExporting}
         hasOrder={!!orderId}
+        hasSelection={!!selected}
+        onAlign={(k: AlignKind) => canvasRef.current?.align(k)}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -131,7 +185,6 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Pr
           onImageUpload={(f) => canvasRef.current?.addImage(f)}
         />
 
-        {/* Side panel content */}
         {panel && (
           <aside className="hidden w-72 shrink-0 border-r border-ink-900/8 bg-paper md:flex md:flex-col">
             {panel === "templates" && (
@@ -145,19 +198,13 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Pr
               />
             )}
             {panel === "text" && (
-              <PanelText
-                onAddText={(text, opts) => canvasRef.current?.addText(text, opts)}
-              />
+              <PanelText onAddText={(text, opts) => canvasRef.current?.addText(text, opts)} />
             )}
             {panel === "shapes" && (
-              <PanelShapes
-                onAddRect={() => canvasRef.current?.addRect()}
-                onAddCircle={() => canvasRef.current?.addCircle()}
-                onAddLine={() => canvasRef.current?.addLine()}
-              />
+              <PanelShapes onAddShape={(kind: ShapeKind) => canvasRef.current?.addShape(kind)} />
             )}
             {panel === "background" && (
-              <PanelBackground onChange={(c) => canvasRef.current?.setBackground(c)} />
+              <PanelBackground onChange={(bg) => canvasRef.current?.setBackground(bg)} />
             )}
             {panel === "layers" && (
               <PanelLayers
@@ -173,13 +220,15 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Pr
                 onDuplicate={() => canvasRef.current?.duplicateSelected()}
                 onBringForward={() => canvasRef.current?.bringForward()}
                 onSendBackward={() => canvasRef.current?.sendBackward()}
+                onReorder={(from, to) => canvasRef.current?.reorderLayer(from, to)}
+                onToggleVisibility={(o) => canvasRef.current?.toggleVisibility(o)}
+                onToggleLock={(o) => canvasRef.current?.toggleLock(o)}
               />
             )}
             {panel === "ai" && (
               <PanelAi
                 freeRemaining={3}
                 onGenerate={async () => {
-                  // Phase 2.5 will wire this to /api/generate-image
                   await new Promise((r) => setTimeout(r, 1500));
                   alert("AI generation lands in Phase 2.5. The UX is ready — just needs the Gemini API call wired up.");
                 }}
@@ -188,19 +237,27 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Pr
           </aside>
         )}
 
-        {/* Canvas */}
         <div className="relative flex-1 overflow-hidden">
           <CanvasBoard
             ref={canvasRef}
             size={size}
             initialTemplate={initialTemplate}
+            initialJSON={initialJSON}
             onSelectionChange={setSelected}
             onObjectsChange={setObjects}
             onZoomChange={setZoom}
             onHistoryChange={(canUndo, canRedo) => setHistory({ canUndo, canRedo })}
+            onAutoSave={onAutoSave}
           />
 
-          {/* Floating bottom bar */}
+          {/* Auto-save indicator */}
+          {savedAt && Date.now() - savedAt < 2200 && (
+            <div className="pointer-events-none absolute right-4 top-4 inline-flex animate-fade-up items-center gap-1.5 rounded-full bg-ink-900/85 px-3 py-1.5 text-xs font-medium text-paper backdrop-blur-md">
+              <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+              Saved
+            </div>
+          )}
+
           <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
             <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-ink-900/10 bg-paper/90 px-2 py-1 shadow-[0_10px_30px_-10px_rgba(10,10,6,0.3)] backdrop-blur-md">
               <button
@@ -234,10 +291,11 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Pr
         <PropertiesPanel
           selected={selected}
           onChange={() => {
-            // Re-trigger object list update
             const fc = canvasRef.current?.getFabric();
             if (fc) setObjects([...fc.getObjects()]);
           }}
+          onApplyFilter={(filter: ImageFilterKind) => canvasRef.current?.applyFilter(filter)}
+          onSetFilterValue={(key, value) => canvasRef.current?.setFilterValue(key, value)}
         />
       </div>
     </div>

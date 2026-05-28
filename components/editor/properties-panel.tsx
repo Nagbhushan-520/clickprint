@@ -2,15 +2,20 @@
 
 import { FabricObject } from "fabric";
 import { useEffect, useState } from "react";
-import { AlignLeft, AlignCenter, AlignRight, Bold, Italic } from "lucide-react";
+import { AlignLeft, AlignCenter, AlignRight, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { ImageFilterKind } from "./canvas-board";
 
 export function PropertiesPanel({
   selected,
   onChange,
+  onApplyFilter,
+  onSetFilterValue,
 }: {
   selected: FabricObject | null;
   onChange: () => void;
+  onApplyFilter?: (filter: ImageFilterKind) => void;
+  onSetFilterValue?: (key: "brightness" | "contrast" | "saturation", value: number) => void;
 }) {
   if (!selected) {
     return (
@@ -24,23 +29,136 @@ export function PropertiesPanel({
 
   const type = (selected as any).type;
   const isText = type === "i-text" || type === "textbox";
+  const isImage = type === "image";
+  const isShape = type === "rect" || type === "circle" || type === "line" || type === "triangle" || type === "polygon" || type === "path";
 
   return (
     <aside className="hidden w-64 shrink-0 overflow-y-auto border-l border-ink-900/8 bg-paper lg:block">
       <div className="border-b border-ink-900/8 px-4 py-4">
         <h3 className="font-display text-sm font-semibold text-ink-900">
-          {isText ? "Text properties" : type === "image" ? "Image properties" : "Shape properties"}
+          {isText ? "Text properties" : isImage ? "Image properties" : "Shape properties"}
         </h3>
       </div>
       <div className="space-y-5 p-4">
-        <FillRow obj={selected} onChange={onChange} />
+        {!isImage && <FillRow obj={selected} onChange={onChange} />}
         {isText && <TextRows obj={selected} onChange={onChange} />}
-        {(type === "rect" || type === "circle" || type === "line") && (
-          <StrokeRow obj={selected} onChange={onChange} />
+        {isShape && <StrokeRow obj={selected} onChange={onChange} />}
+        {isImage && onApplyFilter && onSetFilterValue && (
+          <ImageFilterRows
+            onApplyFilter={onApplyFilter}
+            onSetFilterValue={onSetFilterValue}
+          />
         )}
         <OpacityRow obj={selected} onChange={onChange} />
       </div>
     </aside>
+  );
+}
+
+function ImageFilterRows({
+  onApplyFilter,
+  onSetFilterValue,
+}: {
+  onApplyFilter: (filter: ImageFilterKind) => void;
+  onSetFilterValue: (key: "brightness" | "contrast" | "saturation", value: number) => void;
+}) {
+  const [brightness, setBrightness] = useState(0);
+  const [contrast, setContrast] = useState(0);
+  const [saturation, setSaturation] = useState(0);
+
+  return (
+    <>
+      <div>
+        <Label>Effects</Label>
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          {[
+            { key: "none" as const, label: "None" },
+            { key: "grayscale" as const, label: "B&W" },
+            { key: "sepia" as const, label: "Sepia" },
+            { key: "vintage" as const, label: "Vintage" },
+            { key: "invert" as const, label: "Invert" },
+          ].map((f) => (
+            <button
+              key={f.key}
+              onClick={() => onApplyFilter(f.key)}
+              className="rounded-md border border-ink-900/10 px-2 py-1.5 text-xs font-medium text-ink-700 transition-colors hover:border-ink-900 hover:bg-ink-900 hover:text-paper"
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <FilterSlider
+        label="Brightness"
+        min={-0.5}
+        max={0.5}
+        step={0.05}
+        value={brightness}
+        onChange={(v) => {
+          setBrightness(v);
+          onSetFilterValue("brightness", v);
+        }}
+      />
+      <FilterSlider
+        label="Contrast"
+        min={-0.5}
+        max={0.5}
+        step={0.05}
+        value={contrast}
+        onChange={(v) => {
+          setContrast(v);
+          onSetFilterValue("contrast", v);
+        }}
+      />
+      <FilterSlider
+        label="Saturation"
+        min={-1}
+        max={1}
+        step={0.1}
+        value={saturation}
+        onChange={(v) => {
+          setSaturation(v);
+          onSetFilterValue("saturation", v);
+        }}
+      />
+    </>
+  );
+}
+
+function FilterSlider({
+  label,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+}: {
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <div className="mt-2 flex items-center gap-2">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="flex-1 accent-flame-500"
+        />
+        <span className="w-12 text-right font-mono text-[10px] text-ink-700">
+          {value > 0 ? "+" : ""}{Math.round(value * 100)}
+        </span>
+      </div>
+    </div>
   );
 }
 

@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { PanelHeader } from "./panel-templates";
+import type { BackgroundKind } from "./canvas-board";
+import { cn } from "@/lib/utils";
 
 const COLORS = [
   "#FFFCF5", "#F7F4ED", "#F2E8DC", "#FFFFFF",
@@ -12,28 +15,77 @@ const COLORS = [
   "#1B4332", "#2D6A4F", "#52B788", "#95D5B2",
 ];
 
-export function PanelBackground({ onChange }: { onChange: (color: string) => void }) {
+const GRADIENTS: { from: string; to: string; angle: number; name: string }[] = [
+  { from: "#FF4D2E", to: "#FFAA00", angle: 135, name: "Sunset" },
+  { from: "#0A0A06", to: "#FF4D2E", angle: 180, name: "Ember" },
+  { from: "#1B4332", to: "#52B788", angle: 135, name: "Forest" },
+  { from: "#2E4A6B", to: "#7DA8E5", angle: 180, name: "Sky" },
+  { from: "#7A1B11", to: "#FFAA00", angle: 160, name: "Diwali" },
+  { from: "#F2E8DC", to: "#FF6B41", angle: 135, name: "Cream" },
+  { from: "#0A0A06", to: "#3E3E33", angle: 180, name: "Coal" },
+  { from: "#FF4D2E", to: "#9C1F12", angle: 135, name: "Brick" },
+];
+
+export function PanelBackground({ onChange }: { onChange: (bg: BackgroundKind) => void }) {
+  const [mode, setMode] = useState<"color" | "gradient">("color");
+
   return (
     <div className="flex h-full flex-col">
-      <PanelHeader title="Background" subtitle="Solid color · click to apply" />
-      <div className="grid grid-cols-4 gap-2 overflow-y-auto p-3">
-        {COLORS.map((c) => (
+      <PanelHeader title="Background" subtitle="Solid or gradient · click to apply" />
+
+      <div className="flex border-b border-ink-900/8 px-3 py-2 gap-1">
+        {(["color", "gradient"] as const).map((m) => (
           <button
-            key={c}
-            onClick={() => onChange(c)}
-            className="aspect-square rounded-xl border border-ink-900/10 transition-all hover:scale-105 hover:shadow-md"
-            style={{ background: c }}
-            aria-label={c}
-          />
+            key={m}
+            onClick={() => setMode(m)}
+            className={cn(
+              "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+              mode === m ? "bg-ink-900 text-paper" : "text-ink-600 hover:bg-ink-900/5",
+            )}
+          >
+            {m === "color" ? "Solid" : "Gradient"}
+          </button>
         ))}
       </div>
+
+      {mode === "color" ? (
+        <div className="grid grid-cols-4 gap-2 overflow-y-auto p-3">
+          {COLORS.map((c) => (
+            <button
+              key={c}
+              onClick={() => onChange({ type: "color", color: c })}
+              className="aspect-square rounded-xl border border-ink-900/10 transition-all hover:scale-105 hover:shadow-md"
+              style={{ background: c }}
+              aria-label={c}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 overflow-y-auto p-3">
+          {GRADIENTS.map((g) => (
+            <button
+              key={g.name}
+              onClick={() => onChange({ type: "gradient", from: g.from, to: g.to, angle: g.angle })}
+              className="aspect-square overflow-hidden rounded-xl border border-ink-900/10 transition-all hover:scale-105 hover:shadow-md"
+              style={{ background: `linear-gradient(${g.angle}deg, ${g.from}, ${g.to})` }}
+              title={g.name}
+              aria-label={g.name}
+            >
+              <span className="block w-full bg-ink-900/40 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-paper text-center">
+                {g.name}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="border-t border-ink-900/8 p-3">
         <label className="text-[10px] font-semibold uppercase tracking-widest text-ink-500">
-          Custom
+          Custom color
         </label>
         <input
           type="color"
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange({ type: "color", color: e.target.value })}
           className="mt-2 h-10 w-full cursor-pointer rounded-lg border border-ink-900/10"
         />
       </div>

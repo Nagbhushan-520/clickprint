@@ -5,6 +5,8 @@ import { Undo2, Redo2, Download, ArrowLeft, Loader2, ChevronDown } from "lucide-
 import { Logo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
 import type { EditorSize } from "@/lib/editor/dimensions";
+import { AlignmentBar } from "./alignment-bar";
+import type { AlignKind } from "./canvas-board";
 
 export function TopToolbar({
   size,
@@ -16,6 +18,8 @@ export function TopToolbar({
   onExport,
   isExporting,
   hasOrder,
+  hasSelection,
+  onAlign,
 }: {
   size: EditorSize;
   onSizeChange: (s: EditorSize) => void;
@@ -26,6 +30,8 @@ export function TopToolbar({
   onExport: () => void;
   isExporting: boolean;
   hasOrder: boolean;
+  hasSelection: boolean;
+  onAlign: (k: AlignKind) => void;
 }) {
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-ink-900/8 bg-paper px-3 md:px-4">
@@ -38,10 +44,15 @@ export function TopToolbar({
         <SizeSwitcher size={size} onChange={onSizeChange} />
       </div>
 
+      <div className="hidden md:block">
+        <AlignmentBar onAlign={onAlign} hasSelection={hasSelection} />
+      </div>
+
       <div className="flex items-center gap-2">
         <button
           onClick={onUndo}
           disabled={!canUndo}
+          title="Undo (Cmd+Z)"
           className="rounded-lg border border-ink-900/10 p-2 transition-colors hover:bg-ink-900/5 disabled:opacity-40 disabled:hover:bg-transparent"
           aria-label="Undo"
         >
@@ -50,6 +61,7 @@ export function TopToolbar({
         <button
           onClick={onRedo}
           disabled={!canRedo}
+          title="Redo (Cmd+Shift+Z)"
           className="rounded-lg border border-ink-900/10 p-2 transition-colors hover:bg-ink-900/5 disabled:opacity-40 disabled:hover:bg-transparent"
           aria-label="Redo"
         >
