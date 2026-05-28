@@ -2,7 +2,7 @@
 
 import { FabricObject } from "fabric";
 import { useEffect, useState } from "react";
-import { AlignLeft, AlignCenter, AlignRight, Sparkles } from "lucide-react";
+import { AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, FlipHorizontal, FlipVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ImageFilterKind } from "./canvas-board";
 
@@ -11,11 +11,17 @@ export function PropertiesPanel({
   onChange,
   onApplyFilter,
   onSetFilterValue,
+  onToggleTextStyle,
+  onSetTextProperty,
+  onFlip,
 }: {
   selected: FabricObject | null;
   onChange: () => void;
   onApplyFilter?: (filter: ImageFilterKind) => void;
   onSetFilterValue?: (key: "brightness" | "contrast" | "saturation", value: number) => void;
+  onToggleTextStyle?: (style: "bold" | "italic" | "underline") => void;
+  onSetTextProperty?: (key: "lineHeight" | "charSpacing", value: number) => void;
+  onFlip?: (axis: "horizontal" | "vertical") => void;
 }) {
   if (!selected) {
     return (
@@ -41,13 +47,45 @@ export function PropertiesPanel({
       </div>
       <div className="space-y-5 p-4">
         {!isImage && <FillRow obj={selected} onChange={onChange} />}
-        {isText && <TextRows obj={selected} onChange={onChange} />}
+        {isText && (
+          <>
+            <TextRows obj={selected} onChange={onChange} />
+            {onToggleTextStyle && onSetTextProperty && (
+              <TextStyleRows
+                obj={selected}
+                onToggle={onToggleTextStyle}
+                onSetProperty={onSetTextProperty}
+              />
+            )}
+          </>
+        )}
         {isShape && <StrokeRow obj={selected} onChange={onChange} />}
         {isImage && onApplyFilter && onSetFilterValue && (
           <ImageFilterRows
             onApplyFilter={onApplyFilter}
             onSetFilterValue={onSetFilterValue}
           />
+        )}
+        {(isImage || isShape) && onFlip && (
+          <div>
+            <Label>Flip</Label>
+            <div className="mt-2 grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() => onFlip("horizontal")}
+                className="flex items-center justify-center gap-1.5 rounded-md border border-ink-900/10 px-3 py-2 text-xs font-medium text-ink-700 transition-colors hover:border-ink-900 hover:bg-ink-900/5"
+              >
+                <FlipHorizontal className="h-3.5 w-3.5" />
+                Horizontal
+              </button>
+              <button
+                onClick={() => onFlip("vertical")}
+                className="flex items-center justify-center gap-1.5 rounded-md border border-ink-900/10 px-3 py-2 text-xs font-medium text-ink-700 transition-colors hover:border-ink-900 hover:bg-ink-900/5"
+              >
+                <FlipVertical className="h-3.5 w-3.5" />
+                Vertical
+              </button>
+            </div>
+          </div>
         )}
         <OpacityRow obj={selected} onChange={onChange} />
       </div>
@@ -329,6 +367,108 @@ function StrokeRow({ obj, onChange }: { obj: FabricObject; onChange: () => void 
         <span className="text-xs text-ink-500">px</span>
       </div>
     </div>
+  );
+}
+
+function TextStyleRows({
+  obj,
+  onToggle,
+  onSetProperty,
+}: {
+  obj: FabricObject;
+  onToggle: (style: "bold" | "italic" | "underline") => void;
+  onSetProperty: (key: "lineHeight" | "charSpacing", value: number) => void;
+}) {
+  const o = obj as any;
+  const isBold = o.fontWeight === "bold" || o.fontWeight === 700;
+  const isItalic = o.fontStyle === "italic";
+  const isUnderline = !!o.underline;
+  const [lineHeight, setLineHeight] = useState<number>(o.lineHeight || 1.16);
+  const [charSpacing, setCharSpacing] = useState<number>(o.charSpacing || 0);
+
+  useEffect(() => {
+    setLineHeight(o.lineHeight || 1.16);
+    setCharSpacing(o.charSpacing || 0);
+  }, [obj]);
+
+  return (
+    <>
+      <div>
+        <Label>Style</Label>
+        <div className="mt-2 inline-flex gap-1.5">
+          <button
+            onClick={() => onToggle("bold")}
+            className={cn(
+              "rounded-md border px-3 py-2 transition-colors",
+              isBold ? "border-ink-900 bg-ink-900 text-paper" : "border-ink-900/15 text-ink-700 hover:border-ink-900/40",
+            )}
+            title="Bold"
+          >
+            <Bold className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => onToggle("italic")}
+            className={cn(
+              "rounded-md border px-3 py-2 transition-colors",
+              isItalic ? "border-ink-900 bg-ink-900 text-paper" : "border-ink-900/15 text-ink-700 hover:border-ink-900/40",
+            )}
+            title="Italic"
+          >
+            <Italic className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => onToggle("underline")}
+            className={cn(
+              "rounded-md border px-3 py-2 transition-colors",
+              isUnderline ? "border-ink-900 bg-ink-900 text-paper" : "border-ink-900/15 text-ink-700 hover:border-ink-900/40",
+            )}
+            title="Underline"
+          >
+            <Underline className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <Label>Line height</Label>
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            type="range"
+            min={0.8}
+            max={2.5}
+            step={0.05}
+            value={lineHeight}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              setLineHeight(v);
+              onSetProperty("lineHeight", v);
+            }}
+            className="flex-1 accent-flame-500"
+          />
+          <span className="w-12 text-right font-mono text-[10px] text-ink-700">{lineHeight.toFixed(2)}</span>
+        </div>
+      </div>
+
+      <div>
+        <Label>Letter spacing</Label>
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            type="range"
+            min={-100}
+            max={500}
+            step={10}
+            value={charSpacing}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              setCharSpacing(v);
+              onSetProperty("charSpacing", v);
+            }}
+            className="flex-1 accent-flame-500"
+          />
+          <span className="w-12 text-right font-mono text-[10px] text-ink-700">{charSpacing}</span>
+        </div>
+      </div>
+    </>
   );
 }
 

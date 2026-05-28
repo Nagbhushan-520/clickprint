@@ -12,9 +12,12 @@ import {
   Triangle,
   Polygon,
   Path,
+  Group,
   Gradient,
   ActiveSelection,
   filters as fabricFilters,
+  loadSVGFromString,
+  util as fabricUtil,
 } from "fabric";
 import { DIMENSIONS, type EditorSize, computeFitZoom } from "@/lib/editor/dimensions";
 import { loadFont, preloadAllFonts } from "@/lib/editor/fonts";
@@ -31,11 +34,14 @@ export type CanvasHandle = {
   addShape: (kind: ShapeKind) => void;
   addImage: (file: File) => Promise<void>;
   addImageFromUrl: (url: string) => Promise<void>;
+  addBackgroundImage: (file: File) => Promise<void>;
+  addSticker: (svgString: string) => Promise<void>;
   setBackground: (bg: BackgroundKind) => void;
   loadTemplate: (tpl: Template) => void;
   exportPNG: () => string;
   exportSVG: () => string;
   exportPDF: () => Promise<Uint8Array>;
+  exportJPG: () => string;
   exportJSON: () => object;
   loadJSON: (json: object) => Promise<void>;
   deleteSelected: () => void;
@@ -44,9 +50,14 @@ export type CanvasHandle = {
   sendBackward: () => void;
   applyFilter: (filter: ImageFilterKind, intensity?: number) => void;
   setFilterValue: (key: "brightness" | "contrast" | "saturation", value: number) => void;
+  flipSelected: (axis: "horizontal" | "vertical") => void;
   align: (kind: AlignKind) => void;
   nudge: (dx: number, dy: number) => void;
   reorderLayer: (fromIndex: number, toIndex: number) => void;
+  groupSelected: () => void;
+  ungroupSelected: () => void;
+  toggleTextStyle: (style: "bold" | "italic" | "underline") => void;
+  setTextProperty: (key: "lineHeight" | "charSpacing", value: number) => void;
   setZoom: (zoom: number) => void;
   fitToView: () => void;
   zoomIn: () => void;
@@ -56,6 +67,8 @@ export type CanvasHandle = {
   redo: () => Promise<void>;
   toggleVisibility: (obj: FabricObject) => void;
   toggleLock: (obj: FabricObject) => void;
+  copySelected: () => void;
+  pasteCopied: () => Promise<void>;
 };
 
 type Props = {
@@ -86,6 +99,7 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
     suppress: false,
   });
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clipboardRef = useRef<FabricObject | null>(null);
   const [zoom, setZoomState] = useState(1);
 
   useEffect(() => {
@@ -394,6 +408,44 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
       fc.setActiveObject(img);
       fc.requestRenderAll();
     },
+    addBackgroundImage: async (file) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const url = URL.createObjectURL(file);
+      const img = await FabricImage.fromURL(url, { crossOrigin: "anonymous" });
+      const cw = fc.getWidth();
+      const ch = fc.getHeight();
+      const scale = Math.max(cw / img.width!, ch / img.height!);
+      img.scale(scale);
+      img.set({
+        left: 0,
+        top: 0,
+        selectable: false,
+        evented: false,
+      });
+      (img as any).__isBackground = true;
+      // Remove old background images
+      fc.getObjects().forEach((o) => {
+        if ((o as any).__isBackground) fc.remove(o);
+      });
+      fc.add(img);
+      fc.sendObjectToBack(img);
+      fc.requestRenderAll();
+    },
+    addSticker: async (svgString) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const result = await loadSVGFromString(svgString);
+      const group = fabricUtil.groupSVGElements(result.objects as FabricObject[], result.options);
+      // Scale sticker to a reasonable size on canvas
+      const targetSize = Math.min(fc.getWidth(), fc.getHeight()) * 0.2;
+      const scale = targetSize / Math.max(group.width ?? 100, group.height ?? 100);
+      group.scale(scale);
+      group.set({ left: 300, top: 300 });
+      fc.add(group);
+      fc.setActiveObject(group);
+      fc.requestRenderAll();
+    },
     setBackground: (bg) => {
       const fc = fcRef.current;
       if (!fc) return;
@@ -445,6 +497,11 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
       const fc = fcRef.current;
       if (!fc) return "";
       return fc.toDataURL({ format: "png", quality: 1, multiplier: 1 });
+    },
+    exportJPG: () => {
+      const fc = fcRef.current;
+      if (!fc) return "";
+      return fc.toDataURL({ format: "jpeg", quality: 0.92, multiplier: 1 });
     },
     exportSVG: () => {
       const fc = fcRef.current;
@@ -686,6 +743,84 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
       });
       fc.requestRenderAll();
       onObjectsChange?.(fc.getObjects());
+    },
+    flipSelected: (axis) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const active = fc.getActiveObject();
+      if (!active) return;
+      if (axis === "horizontal") active.set({ flipX: !active.flipX });
+      else active.set({ flipY: !active.flipY });
+      fc.requestRenderAll();
+      fc.fire("object:modified", { target: active });
+    },
+    groupSelected: () => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const active = fc.getActiveObject();
+      if (!active) return;
+      if (active instanceof ActiveSelection) {
+        const group = new Group(active.removeAll() as FabricObject[]);
+        fc.add(group);
+        fc.setActiveObject(group);
+        fc.requestRenderAll();
+      }
+    },
+    ungroupSelected: () => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const active = fc.getActiveObject();
+      if (!active || !(active instanceof Group)) return;
+      const items = active.removeAll() as FabricObject[];
+      fc.remove(active);
+      items.forEach((item) => fc.add(item));
+      const sel = new ActiveSelection(items, { canvas: fc });
+      fc.setActiveObject(sel);
+      fc.requestRenderAll();
+    },
+    toggleTextStyle: (style) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const active = fc.getActiveObject() as any;
+      if (!active || (active.type !== "textbox" && active.type !== "i-text")) return;
+      if (style === "bold") {
+        active.set({ fontWeight: active.fontWeight === "bold" || active.fontWeight === 700 ? "normal" : "bold" });
+      } else if (style === "italic") {
+        active.set({ fontStyle: active.fontStyle === "italic" ? "normal" : "italic" });
+      } else if (style === "underline") {
+        active.set({ underline: !active.underline });
+      }
+      fc.requestRenderAll();
+      fc.fire("object:modified", { target: active });
+    },
+    setTextProperty: (key, value) => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const active = fc.getActiveObject() as any;
+      if (!active || (active.type !== "textbox" && active.type !== "i-text")) return;
+      active.set({ [key]: value });
+      fc.requestRenderAll();
+    },
+    copySelected: () => {
+      const fc = fcRef.current;
+      if (!fc) return;
+      const active = fc.getActiveObject();
+      if (!active) return;
+      active.clone().then((cloned: FabricObject) => {
+        clipboardRef.current = cloned;
+      });
+    },
+    pasteCopied: async () => {
+      const fc = fcRef.current;
+      if (!fc || !clipboardRef.current) return;
+      const cloned = await clipboardRef.current.clone();
+      cloned.set({
+        left: (clipboardRef.current.left ?? 0) + 40,
+        top: (clipboardRef.current.top ?? 0) + 40,
+      });
+      fc.add(cloned);
+      fc.setActiveObject(cloned);
+      fc.requestRenderAll();
     },
   }));
 

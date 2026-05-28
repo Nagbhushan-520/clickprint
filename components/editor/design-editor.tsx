@@ -12,6 +12,8 @@ import { PanelShapes } from "./panel-shapes";
 import { PanelBackground } from "./panel-background";
 import { PanelLayers } from "./panel-layers";
 import { PanelAi } from "./panel-ai";
+import { PanelStickers } from "./panel-stickers";
+import { PanelBrandKit } from "./panel-brand-kit";
 import { PropertiesPanel } from "./properties-panel";
 import { ZoomIn, ZoomOut, Maximize, Save, CheckCircle2 } from "lucide-react";
 import type { EditorSize } from "@/lib/editor/dimensions";
@@ -78,6 +80,23 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Pr
       if (meta && e.key === "d" && !inField) {
         e.preventDefault();
         canvasRef.current?.duplicateSelected();
+      }
+      // Group / ungroup
+      if (meta && e.key === "g" && !inField) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          canvasRef.current?.ungroupSelected();
+        } else {
+          canvasRef.current?.groupSelected();
+        }
+      }
+      // Copy / paste
+      if (meta && e.key === "c" && !inField) {
+        canvasRef.current?.copySelected();
+      }
+      if (meta && e.key === "v" && !inField) {
+        e.preventDefault();
+        canvasRef.current?.pasteCopied();
       }
       if ((e.key === "Delete" || e.key === "Backspace") && !inField && selected) {
         canvasRef.current?.deleteSelected();
@@ -186,7 +205,14 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Pr
         />
 
         {panel && (
-          <aside className="hidden w-72 shrink-0 border-r border-ink-900/8 bg-paper md:flex md:flex-col">
+          <aside className="absolute inset-y-0 left-16 z-30 w-72 shrink-0 border-r border-ink-900/8 bg-paper md:relative md:left-0 md:flex md:flex-col">
+            <button
+              onClick={() => setPanel(null)}
+              className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full border border-ink-900/10 bg-paper md:hidden"
+              aria-label="Close panel"
+            >
+              <span className="text-xs text-ink-700">✕</span>
+            </button>
             {panel === "templates" && (
               <PanelTemplates
                 currentSize={size}
@@ -204,7 +230,41 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Pr
               <PanelShapes onAddShape={(kind: ShapeKind) => canvasRef.current?.addShape(kind)} />
             )}
             {panel === "background" && (
-              <PanelBackground onChange={(bg) => canvasRef.current?.setBackground(bg)} />
+              <PanelBackground
+                onChange={(bg) => canvasRef.current?.setBackground(bg)}
+                onUploadImage={(f) => canvasRef.current?.addBackgroundImage(f)}
+              />
+            )}
+            {panel === "stickers" && (
+              <PanelStickers
+                onAdd={(svg) => canvasRef.current?.addSticker(svg)}
+              />
+            )}
+            {panel === "brand-kit" && (
+              <PanelBrandKit
+                onPickColor={(color) => {
+                  // Apply to selected object's fill, or set as background
+                  const fc = canvasRef.current?.getFabric();
+                  const active = fc?.getActiveObject();
+                  if (active) {
+                    (active as any).set({ fill: color });
+                    fc?.requestRenderAll();
+                  } else {
+                    canvasRef.current?.setBackground({ type: "color", color });
+                  }
+                }}
+                onPickFont={(family) => {
+                  const fc = canvasRef.current?.getFabric();
+                  const active = fc?.getActiveObject() as any;
+                  if (active && (active.type === "textbox" || active.type === "i-text")) {
+                    active.set({ fontFamily: family });
+                    fc?.requestRenderAll();
+                  } else {
+                    canvasRef.current?.addText("Your text", { fontFamily: family, fontSize: 140 });
+                  }
+                }}
+                onPickLogo={(dataUrl) => canvasRef.current?.addImageFromUrl(dataUrl)}
+              />
             )}
             {panel === "layers" && (
               <PanelLayers
@@ -296,6 +356,9 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false }: Pr
           }}
           onApplyFilter={(filter: ImageFilterKind) => canvasRef.current?.applyFilter(filter)}
           onSetFilterValue={(key, value) => canvasRef.current?.setFilterValue(key, value)}
+          onToggleTextStyle={(style) => canvasRef.current?.toggleTextStyle(style)}
+          onSetTextProperty={(key, value) => canvasRef.current?.setTextProperty(key, value)}
+          onFlip={(axis) => canvasRef.current?.flipSelected(axis)}
         />
       </div>
     </div>

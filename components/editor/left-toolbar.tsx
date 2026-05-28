@@ -1,10 +1,10 @@
 "use client";
 
 import { useRef } from "react";
-import { LayoutTemplate, Type, Square, Circle as CircleIcon, Image as ImageIcon, Layers, Sparkles, Palette } from "lucide-react";
+import { LayoutTemplate, Type, Square, Image as ImageIcon, Layers, Sparkles, Palette, Smile, Bookmark } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type Panel = "templates" | "text" | "shapes" | "images" | "layers" | "ai" | "background" | null;
+export type Panel = "templates" | "text" | "shapes" | "images" | "layers" | "ai" | "background" | "stickers" | "brand-kit" | null;
 
 export function LeftToolbar({
   active,
@@ -21,25 +21,28 @@ export function LeftToolbar({
     { id: "templates", label: "Templates", icon: LayoutTemplate },
     { id: "text", label: "Text", icon: Type },
     { id: "shapes", label: "Shapes", icon: Square },
+    { id: "stickers", label: "Stickers", icon: Smile },
     { id: "images", label: "Images", icon: ImageIcon },
     { id: "ai", label: "AI", icon: Sparkles },
     { id: "background", label: "Background", icon: Palette },
+    { id: "brand-kit", label: "Brand kit", icon: Bookmark },
     { id: "layers", label: "Layers", icon: Layers },
   ];
 
   return (
-    <aside className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-ink-900/8 bg-paper py-3 md:w-20">
+    <aside className="flex w-16 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-ink-900/8 bg-paper py-3 md:w-20">
       {tools.map((t) => (
         <button
           key={t.id}
           onClick={() => {
             if (t.id === "images") {
               fileRef.current?.click();
+              return;
             }
             onChange(active === t.id ? null : t.id);
           }}
           className={cn(
-            "group flex w-14 flex-col items-center gap-1 rounded-xl px-1 py-2 transition-all md:w-16",
+            "group flex w-14 shrink-0 flex-col items-center gap-1 rounded-xl px-1 py-2 transition-all md:w-16",
             active === t.id
               ? "bg-flame-500/10 text-flame-600"
               : "text-ink-600 hover:bg-ink-900/5 hover:text-ink-900",

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Image as ImageIcon } from "lucide-react";
 import { PanelHeader } from "./panel-templates";
 import type { BackgroundKind } from "./canvas-board";
 import { cn } from "@/lib/utils";
@@ -26,15 +27,22 @@ const GRADIENTS: { from: string; to: string; angle: number; name: string }[] = [
   { from: "#FF4D2E", to: "#9C1F12", angle: 135, name: "Brick" },
 ];
 
-export function PanelBackground({ onChange }: { onChange: (bg: BackgroundKind) => void }) {
-  const [mode, setMode] = useState<"color" | "gradient">("color");
+export function PanelBackground({
+  onChange,
+  onUploadImage,
+}: {
+  onChange: (bg: BackgroundKind) => void;
+  onUploadImage: (file: File) => void;
+}) {
+  const [mode, setMode] = useState<"color" | "gradient" | "image">("color");
+  const imageRef = useRef<HTMLInputElement>(null);
 
   return (
     <div className="flex h-full flex-col">
-      <PanelHeader title="Background" subtitle="Solid or gradient · click to apply" />
+      <PanelHeader title="Background" subtitle="Solid, gradient, or image" />
 
       <div className="flex border-b border-ink-900/8 px-3 py-2 gap-1">
-        {(["color", "gradient"] as const).map((m) => (
+        {(["color", "gradient", "image"] as const).map((m) => (
           <button
             key={m}
             onClick={() => setMode(m)}
@@ -43,12 +51,12 @@ export function PanelBackground({ onChange }: { onChange: (bg: BackgroundKind) =
               mode === m ? "bg-ink-900 text-paper" : "text-ink-600 hover:bg-ink-900/5",
             )}
           >
-            {m === "color" ? "Solid" : "Gradient"}
+            {m === "color" ? "Solid" : m === "gradient" ? "Gradient" : "Image"}
           </button>
         ))}
       </div>
 
-      {mode === "color" ? (
+      {mode === "color" && (
         <div className="grid grid-cols-4 gap-2 overflow-y-auto p-3">
           {COLORS.map((c) => (
             <button
@@ -60,7 +68,9 @@ export function PanelBackground({ onChange }: { onChange: (bg: BackgroundKind) =
             />
           ))}
         </div>
-      ) : (
+      )}
+
+      {mode === "gradient" && (
         <div className="grid grid-cols-2 gap-2 overflow-y-auto p-3">
           {GRADIENTS.map((g) => (
             <button
@@ -76,6 +86,35 @@ export function PanelBackground({ onChange }: { onChange: (bg: BackgroundKind) =
               </span>
             </button>
           ))}
+        </div>
+      )}
+
+      {mode === "image" && (
+        <div className="overflow-y-auto p-3 space-y-3">
+          <button
+            onClick={() => imageRef.current?.click()}
+            className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-ink-900/15 bg-paper p-8 text-center transition-all hover:border-flame-500 hover:bg-flame-500/5"
+          >
+            <div className="grid h-12 w-12 place-items-center rounded-xl bg-flame-500 text-paper">
+              <ImageIcon className="h-5 w-5" />
+            </div>
+            <div className="text-xs font-semibold text-ink-900">Upload background image</div>
+            <div className="text-[10px] text-ink-500">JPG, PNG · fills canvas</div>
+          </button>
+          <input
+            ref={imageRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onUploadImage(f);
+              e.currentTarget.value = "";
+            }}
+          />
+          <p className="rounded-xl bg-cream px-3 py-2 text-[11px] leading-relaxed text-ink-500">
+            Image will fill the canvas and lock to the back. You can still add text and shapes on top.
+          </p>
         </div>
       )}
 
