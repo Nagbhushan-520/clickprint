@@ -17,6 +17,9 @@ import { PanelBrandKit } from "./panel-brand-kit";
 import { PanelQRCode } from "./panel-qrcode";
 import { PanelPhotos } from "./panel-photos";
 import { PagesBar, type Page } from "./pages-bar";
+import { MobileBottomNav } from "./mobile-bottom-nav";
+import { MobileBottomSheet } from "./mobile-bottom-sheet";
+import { MobileContextBar, type ContextAction } from "./mobile-context-bar";
 import { PropertiesPanel } from "./properties-panel";
 import { ZoomIn, ZoomOut, Maximize, Save, CheckCircle2 } from "lucide-react";
 import type { EditorSize } from "@/lib/editor/dimensions";
@@ -36,7 +39,12 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false, temp
   const router = useRouter();
   const canvasRef = useRef<CanvasHandle>(null);
   const [size, setSize] = useState<EditorSize>(initialSize);
-  const [panel, setPanel] = useState<Panel>(aiMode ? "ai" : "templates");
+  // Default to canvas-first on mobile (no panel). On desktop, open templates.
+  const [panel, setPanel] = useState<Panel>(() => {
+    if (aiMode) return "ai";
+    if (typeof window !== "undefined" && window.innerWidth < 768) return null;
+    return "templates";
+  });
   const [selected, setSelected] = useState<FabricObject | null>(null);
   const [objects, setObjects] = useState<FabricObject[]>([]);
   const [zoom, setZoom] = useState(1);
@@ -300,28 +308,18 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false, temp
       />
 
       <div className="flex flex-1 overflow-hidden">
-        <LeftToolbar
-          active={panel}
-          onChange={setPanel}
-          onImageUpload={(f) => canvasRef.current?.addImage(f)}
-        />
-
-        {/* Mobile backdrop when panel is open */}
-        {panel && (
-          <div
-            className="fixed inset-0 z-20 bg-ink-900/30 backdrop-blur-sm md:hidden"
-            onClick={() => setPanel(null)}
+        {/* Desktop left toolbar */}
+        <div className="hidden md:block">
+          <LeftToolbar
+            active={panel}
+            onChange={setPanel}
+            onImageUpload={(f) => canvasRef.current?.addImage(f)}
           />
-        )}
+        </div>
+
+        {/* Desktop side panel */}
         {panel && (
-          <aside className="fixed left-16 top-14 bottom-20 z-30 flex w-60 flex-col border-r border-ink-900/8 bg-paper shadow-2xl md:static md:left-auto md:top-auto md:bottom-auto md:shadow-none md:w-64">
-            <button
-              onClick={() => setPanel(null)}
-              className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full border border-ink-900/10 bg-paper md:hidden z-10"
-              aria-label="Close panel"
-            >
-              <span className="text-xs text-ink-700">✕</span>
-            </button>
+          <aside className="hidden w-64 shrink-0 overflow-hidden md:flex md:flex-col border-r border-ink-900/8 bg-paper">
             {panel === "templates" && (
               <PanelTemplates
                 currentSize={size}
@@ -420,6 +418,62 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false, temp
           </aside>
         )}
 
+        {/* Mobile bottom sheet — same panel content but as a slide-up sheet */}
+        <MobileBottomSheet open={!!panel && !selected} onClose={() => setPanel(null)}>
+          {panel === "templates" && (
+            <PanelTemplates
+              currentSize={size}
+              onSelect={(tpl) => {
+                setSize(tpl.size);
+                canvasRef.current?.resize(tpl.size);
+                canvasRef.current?.loadTemplate(tpl);
+                setPanel(null);
+              }}
+            />
+          )}
+          {panel === "text" && <PanelText onAddText={(text, opts) => { canvasRef.current?.addText(text, opts); setPanel(null); }} />}
+          {panel === "shapes" && <PanelShapes onAddShape={(kind) => { canvasRef.current?.addShape(kind); setPanel(null); }} />}
+          {panel === "background" && <PanelBackground onChange={(bg) => { canvasRef.current?.setBackground(bg); }} onUploadImage={(f) => { canvasRef.current?.addBackgroundImage(f); setPanel(null); }} />}
+          {panel === "stickers" && <PanelStickers onAdd={(svg) => { canvasRef.current?.addSticker(svg); setPanel(null); }} />}
+          {panel === "photos" && <PanelPhotos onAdd={async (url) => { await canvasRef.current?.addImageFromUrl(url); setPanel(null); }} />}
+          {panel === "qrcode" && <PanelQRCode onAdd={async (d, c, b) => { await canvasRef.current?.addQRCode(d, c, b); setPanel(null); }} />}
+          {panel === "brand-kit" && (
+            <PanelBrandKit
+              onPickColor={(color) => {
+                const fc = canvasRef.current?.getFabric();
+                const active = fc?.getActiveObject();
+                if (active) { (active as any).set({ fill: color }); fc?.requestRenderAll(); }
+                else canvasRef.current?.setBackground({ type: "color", color });
+              }}
+              onPickFont={(family) => {
+                const fc = canvasRef.current?.getFabric();
+                const active = fc?.getActiveObject() as any;
+                if (active && (active.type === "textbox" || active.type === "i-text")) {
+                  active.set({ fontFamily: family }); fc?.requestRenderAll();
+                } else canvasRef.current?.addText("Your text", { fontFamily: family, fontSize: 140 });
+              }}
+              onPickLogo={(dataUrl) => { canvasRef.current?.addImageFromUrl(dataUrl); setPanel(null); }}
+            />
+          )}
+          {panel === "layers" && (
+            <PanelLayers
+              objects={objects}
+              selected={selected}
+              onSelect={(o) => { const fc = canvasRef.current?.getFabric(); fc?.setActiveObject(o); fc?.requestRenderAll(); setSelected(o); setPanel(null); }}
+              onDelete={() => canvasRef.current?.deleteSelected()}
+              onDuplicate={() => canvasRef.current?.duplicateSelected()}
+              onBringForward={() => canvasRef.current?.bringForward()}
+              onSendBackward={() => canvasRef.current?.sendBackward()}
+              onReorder={(from, to) => canvasRef.current?.reorderLayer(from, to)}
+              onToggleVisibility={(o) => canvasRef.current?.toggleVisibility(o)}
+              onToggleLock={(o) => canvasRef.current?.toggleLock(o)}
+            />
+          )}
+          {panel === "ai" && (
+            <PanelAi freeRemaining={3} onGenerate={async () => { await new Promise((r) => setTimeout(r, 1500)); alert("AI generation lands in Phase 2.5."); }} />
+          )}
+        </MobileBottomSheet>
+
         <div className="relative flex-1 overflow-hidden">
           <CanvasBoard
             ref={canvasRef}
@@ -511,15 +565,47 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false, temp
         />
       </div>
 
-      {/* Pages bar */}
-      <PagesBar
-        pages={pages}
-        currentIndex={currentPageIndex}
-        onSelect={switchToPage}
-        onAddBlank={addBlankPage}
-        onDuplicate={duplicatePage}
-        onDelete={deletePage}
-      />
+      {/* Pages bar — desktop only */}
+      <div className="hidden md:block">
+        <PagesBar
+          pages={pages}
+          currentIndex={currentPageIndex}
+          onSelect={switchToPage}
+          onAddBlank={addBlankPage}
+          onDuplicate={duplicatePage}
+          onDelete={deletePage}
+        />
+      </div>
+
+      {/* Mobile: Bottom nav OR context bar based on selection */}
+      {selected ? (
+        <MobileContextBar
+          selected={selected}
+          onAction={(action) => {
+            if (action === "delete") canvasRef.current?.deleteSelected();
+            else if (action === "duplicate") canvasRef.current?.duplicateSelected();
+            else if (action === "flip") canvasRef.current?.flipSelected("horizontal");
+            else if (action === "color") setPanel("background");
+            else if (action === "font") setPanel("text");
+            else if (action === "size") setPanel("text");
+            else if (action === "style") setPanel("text");
+            else if (action === "layers") setPanel("layers");
+            else if (action === "ai") setPanel("ai");
+          }}
+          onDone={() => {
+            const fc = canvasRef.current?.getFabric();
+            fc?.discardActiveObject();
+            fc?.requestRenderAll();
+            setSelected(null);
+          }}
+        />
+      ) : (
+        <MobileBottomNav
+          active={panel}
+          onChange={setPanel}
+          onImageUpload={(f) => canvasRef.current?.addImage(f)}
+        />
+      )}
     </div>
   );
 }

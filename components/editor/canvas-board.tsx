@@ -1027,7 +1027,7 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
       ref={containerRef}
       className="relative h-full w-full overflow-auto bg-cream [background-image:radial-gradient(circle,rgba(10,10,6,0.06)_1px,transparent_1px)] [background-size:24px_24px]"
     >
-      <div className="grid min-h-full min-w-full place-items-center p-8 md:p-12">
+      <div className="grid min-h-full min-w-full place-items-center p-4 md:p-12">
         <div className="relative shadow-[0_30px_60px_-20px_rgba(10,10,6,0.3)]">
           <canvas ref={elRef} />
           {/* Snap guides overlay */}
