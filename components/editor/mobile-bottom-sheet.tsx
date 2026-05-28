@@ -26,7 +26,7 @@ export function MobileBottomSheet({
         className="absolute inset-0 bg-ink-900/40 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="absolute inset-x-0 bottom-0 max-h-[78vh] overflow-hidden rounded-t-3xl bg-paper shadow-2xl animate-fade-up">
+      <div className="absolute inset-x-0 bottom-0 h-[65vh] overflow-hidden rounded-t-3xl bg-paper shadow-2xl animate-fade-up">
         {/* Drag handle */}
         <div className="flex justify-center pt-3 pb-1">
           <div className="h-1 w-12 rounded-full bg-ink-900/15" />
@@ -34,12 +34,12 @@ export function MobileBottomSheet({
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-ink-900/5 text-ink-700 hover:bg-ink-900/10"
+          className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-ink-900/5 text-ink-700 hover:bg-ink-900/10 z-10"
           aria-label="Close"
         >
           <X className="h-4 w-4" />
         </button>
-        <div className="h-[calc(78vh-2rem)] overflow-y-auto">
+        <div className="h-[calc(65vh-2rem)] overflow-y-auto">
           {children}
         </div>
       </div>

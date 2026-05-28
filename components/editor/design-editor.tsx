@@ -328,6 +328,13 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false, temp
                   canvasRef.current?.resize(tpl.size);
                   canvasRef.current?.loadTemplate(tpl);
                 }}
+                onSelectCustom={async (tpl) => {
+                  // Load image as background
+                  const res = await fetch(tpl.imageDataUrl);
+                  const blob = await res.blob();
+                  const file = new File([blob], tpl.name + ".png", { type: "image/png" });
+                  canvasRef.current?.addBackgroundImage(file);
+                }}
               />
             )}
             {panel === "text" && (
@@ -427,6 +434,13 @@ export function DesignEditor({ orderId, initialSize = "A5", aiMode = false, temp
                 setSize(tpl.size);
                 canvasRef.current?.resize(tpl.size);
                 canvasRef.current?.loadTemplate(tpl);
+                setPanel(null);
+              }}
+              onSelectCustom={async (tpl) => {
+                const res = await fetch(tpl.imageDataUrl);
+                const blob = await res.blob();
+                const file = new File([blob], tpl.name + ".png", { type: "image/png" });
+                await canvasRef.current?.addBackgroundImage(file);
                 setPanel(null);
               }}
             />

@@ -123,18 +123,27 @@ export const CanvasBoard = forwardRef<CanvasHandle, Props>(function CanvasBoard(
       height: dim.px.h,
       backgroundColor: "#FFFCF5",
       preserveObjectStacking: true,
-      enableRetinaScaling: false,
-      selectionColor: "rgba(255, 77, 46, 0.15)",
-      selectionBorderColor: "#FF4D2E",
+      enableRetinaScaling: true,        // Retina for mobile high-DPI
+      allowTouchScrolling: false,       // Prevent touch scroll from blocking object drag
+      selection: true,                  // Enable selection (default but explicit)
+      selectionColor: "rgba(124, 58, 237, 0.15)",  // Canva-style purple
+      selectionBorderColor: "#7C3AED",
       selectionLineWidth: 2,
+      uniformScaling: false,            // Allow independent X/Y scaling
+      stopContextMenu: false,
+      fireRightClick: true,
     });
 
-    FabricObject.ownDefaults.borderColor = "#FF4D2E";
-    FabricObject.ownDefaults.cornerColor = "#FF4D2E";
+    // Canva-style purple selection handles, BIG touch targets for mobile
+    FabricObject.ownDefaults.borderColor = "#7C3AED";
+    FabricObject.ownDefaults.cornerColor = "#FFFFFF";
+    FabricObject.ownDefaults.cornerStrokeColor = "#7C3AED";
     FabricObject.ownDefaults.cornerStyle = "circle";
-    FabricObject.ownDefaults.cornerSize = 18;
+    FabricObject.ownDefaults.cornerSize = 14;       // Visual size
+    FabricObject.ownDefaults.touchCornerSize = 36;  // Touch hit area — much bigger
     FabricObject.ownDefaults.transparentCorners = false;
-    FabricObject.ownDefaults.padding = 4;
+    FabricObject.ownDefaults.padding = 6;
+    FabricObject.ownDefaults.borderScaleFactor = 2; // Thicker border
 
     fcRef.current = fc;
     preloadAllFonts();
