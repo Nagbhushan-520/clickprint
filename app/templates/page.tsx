@@ -3,9 +3,48 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
-import { TEMPLATES, TEMPLATE_CATEGORIES, type TemplateCategory } from "@/lib/editor/templates";
-import { TemplateThumbCanvas } from "@/components/editor/template-thumb-canvas";
+import { TEMPLATES, TEMPLATE_CATEGORIES, type Template, type TemplateCategory } from "@/lib/editor/templates";
 import { cn } from "@/lib/utils";
+
+// Lightweight CSS preview (no canvas) — the real editor renders the full design.
+function SimpleThumb({ tpl }: { tpl: Template }) {
+  const W = tpl.size === "A4" ? 2480 : 1748;
+  const H = tpl.size === "A4" ? 3508 : 2480;
+  const aspect = tpl.size === "A4" ? "210 / 297" : "148 / 210";
+  return (
+    <div className="relative w-full overflow-hidden" style={{ aspectRatio: aspect, backgroundColor: tpl.background }}>
+      {tpl.objects.slice(0, 8).map((o, i) => {
+        if (o.type === "text") {
+          return (
+            <div key={i} className="absolute" style={{
+              left: `${(o.left / W) * 100}%`, top: `${(o.top / H) * 100}%`,
+              color: o.fill, fontFamily: o.fontFamily,
+              fontSize: `${Math.max(Math.min(o.fontSize / 26, 15), 5)}px`,
+              fontWeight: typeof o.fontWeight === "number" ? o.fontWeight : o.fontWeight === "bold" ? 700 : 400,
+              fontStyle: o.fontStyle || "normal", lineHeight: o.lineHeight ?? 1.05,
+              maxWidth: "88%", whiteSpace: "pre-line",
+            }}>{o.text}</div>
+          );
+        }
+        if (o.type === "rect") {
+          return <div key={i} className="absolute" style={{
+            left: `${(o.left / W) * 100}%`, top: `${(o.top / H) * 100}%`,
+            width: `${(o.width / W) * 100}%`, height: `${(o.height / H) * 100}%`,
+            background: o.fill, borderRadius: o.rx ? `${(o.rx / W) * 100}%` : 0,
+          }} />;
+        }
+        if (o.type === "circle") {
+          return <div key={i} className="absolute rounded-full" style={{
+            left: `${(o.left / W) * 100}%`, top: `${(o.top / H) * 100}%`,
+            width: `${((o.radius * 2) / W) * 100}%`, height: `${((o.radius * 2) / H) * 100}%`,
+            background: o.fill,
+          }} />;
+        }
+        return null;
+      })}
+    </div>
+  );
+}
 
 export default function TemplatesPage() {
   const [category, setCategory] = useState<TemplateCategory | "all">("all");
@@ -75,7 +114,7 @@ export default function TemplatesPage() {
               href={`/design?template=${tpl.id}`}
               className="group overflow-hidden rounded-2xl border border-ink-900/8 bg-paper transition-all hover:border-ink-900/40 hover:shadow-[0_20px_40px_-20px_rgba(10,10,6,0.3)] hover:-translate-y-1"
             >
-              <TemplateThumbCanvas tpl={tpl} width={300} />
+              <SimpleThumb tpl={tpl} />
               <div className="p-4">
                 <h3 className="truncate font-display text-base font-bold tracking-tight text-ink-900">
                   {tpl.name}

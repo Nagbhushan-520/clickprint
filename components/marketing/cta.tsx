@@ -36,7 +36,7 @@ export function CTA() {
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
-              <Button asChild variant="outline" size="xl">
+              <Button asChild variant="outline" size="xl" className="border-paper/40 bg-transparent text-paper hover:bg-paper hover:text-ink-900">
                 <Link href="/design">Open design tool</Link>
               </Button>
             </div>

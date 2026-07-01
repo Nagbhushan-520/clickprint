@@ -15,17 +15,23 @@ const buttonVariants = cva(
         flame:
           "bg-flame-500 text-paper hover:bg-flame-600 hover:shadow-[0_8px_30px_-12px_rgba(255,77,46,0.8)]",
         ghost:
-          "border border-ink-900/15 text-ink-900 hover:border-ink-900 hover:bg-ink-900 hover:text-paper",
+          "border border-ink-900/15 text-ink-900 hover:bg-ink-900/5",
         outline:
-          "border border-paper/30 text-paper hover:bg-paper hover:text-ink-900",
+          "border border-input bg-background text-ink-900 hover:bg-accent hover:text-accent-foreground",
         link:
           "text-ink-900 underline-offset-4 hover:text-flame-500 hover:underline px-0",
+        // shadcn variants used by the design editor
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
       },
       size: {
         sm: "px-4 py-2 text-xs",
         md: "px-6 py-3 text-sm",
         lg: "px-7 py-3.5 text-base",
         xl: "px-9 py-4 text-base",
+        default: "h-10 px-4 py-2 text-sm",
+        icon: "h-8 w-8 shrink-0",
       },
     },
     defaultVariants: {

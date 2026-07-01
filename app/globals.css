@@ -11,6 +11,20 @@
     --border: 30 8% 84%;
     --input: 30 8% 88%;
     --ring: 13 100% 59%;
+    /* shadcn tokens used by the design editor UI */
+    --card: 0 0% 100%;
+    --card-foreground: 30 7% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 30 7% 4%;
+    --primary: 13 100% 59%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 48 16% 90%;
+    --secondary-foreground: 30 7% 12%;
+    --accent: 48 16% 90%;
+    --accent-foreground: 30 7% 12%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --radius: 0.5rem;
   }
 
   * {

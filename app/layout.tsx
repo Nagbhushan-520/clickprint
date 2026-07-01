@@ -3,6 +3,8 @@ import { Inter, Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
+import { QueryProvider } from "@/components/query-provider";
+import { Toaster } from "@/components/ui/sonner";
 import { brand } from "@/lib/config/brand";
 import { site, SITE_URL } from "@/lib/config/site";
 import { JsonLd } from "@/components/seo/json-ld";
@@ -109,9 +111,12 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <Header />
-        <main>{children}</main>
-        <Footer />
+        <QueryProvider>
+          <Header />
+          <main>{children}</main>
+          <Footer />
+          <Toaster />
+        </QueryProvider>
       </body>
     </html>
   );
