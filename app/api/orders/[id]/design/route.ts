@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 import { getOrder, updateOrder } from "@/lib/store/orders";
+import { getSupabaseAdmin, isSupabaseConfigured, DESIGN_BUCKET } from "@/lib/supabase/server";
 
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
 
@@ -21,19 +22,44 @@ export async function POST(
     return NextResponse.json({ error: "Invalid PNG payload" }, { status: 400 });
   }
 
-  await fs.mkdir(UPLOAD_DIR, { recursive: true });
   const buf = Buffer.from(png.replace(/^data:image\/png;base64,/, ""), "base64");
-  const filename = `${id}-design-${Date.now()}.png`;
-  await fs.writeFile(path.join(UPLOAD_DIR, filename), buf);
+  const stamp = Date.now();
+  const pngName = `designs/${id}-design-${stamp}.png`;
+  const jsonName = `designs/${id}-design-${stamp}.json`;
 
-  // Also save the source JSON so user can re-open & edit later
-  const jsonPath = `${id}-design-${Date.now()}.json`;
-  await fs.writeFile(path.join(UPLOAD_DIR, jsonPath), JSON.stringify(json, null, 2));
+  let storedPath: string;
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const up = await supabase.storage
+      .from(DESIGN_BUCKET)
+      .upload(pngName, buf, { contentType: "image/png", upsert: true });
+    if (up.error) {
+      return NextResponse.json({ error: `Save failed: ${up.error.message}` }, { status: 500 });
+    }
+    // Save editable JSON alongside so the design can be reopened later.
+    await supabase.storage
+      .from(DESIGN_BUCKET)
+      .upload(jsonName, Buffer.from(JSON.stringify(json)), {
+        contentType: "application/json",
+        upsert: true,
+      });
+    storedPath = supabase.storage.from(DESIGN_BUCKET).getPublicUrl(pngName).data.publicUrl;
+  } else {
+    await fs.mkdir(UPLOAD_DIR, { recursive: true });
+    const localPng = `${id}-design-${stamp}.png`;
+    await fs.writeFile(path.join(UPLOAD_DIR, localPng), buf);
+    await fs.writeFile(
+      path.join(UPLOAD_DIR, `${id}-design-${stamp}.json`),
+      JSON.stringify(json, null, 2),
+    );
+    storedPath = `/uploads/${localPng}`;
+  }
 
   const updated = await updateOrder(id, {
     uploadedFile: {
-      filename: filename,
-      storedPath: `/uploads/${filename}`,
+      filename: `${id}-design-${stamp}.png`,
+      storedPath,
       sizeKb: Math.round(buf.length / 1024),
       mimeType: "image/png",
     },
